@@ -1,1 +1,0 @@
-{"version":3,"sources":["../../../../../../packages/site/app/layout.tsx"],"sourcesContent":["import type { ReactNode } from 'react';\n\nexport default function RootLayout({ children }: { children: ReactNode }) {\n  return children;\n}\n"],"names":["RootLayout","children"],"mappings":"wDAEe,SAASA,AAAW,UAAEC,CAAQ,CAA2B,EACtE,OAAOA,CACT"}
