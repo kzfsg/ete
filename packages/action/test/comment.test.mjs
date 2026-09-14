@@ -6,7 +6,7 @@ const step = (index, text, status, extra = {}) => ({ index, text, kind: 'action'
 const login = {
   name: 'Sign in with valid credentials', file: 'e2e/login/sign-in.yaml', flow: 'Login', mode: 'replay', status: 'passed', durationMs: 3100, anomalyCount: 0,
   recording: { videoPath: 'video.webm', tracePath: 'trace.zip', filmstripPath: 'filmstrip.png' },
-  steps: [step(1, 'go to /login', 'passed'), step(2, 'click Sign in', 'healed', { healedFrom: { kind: 'click', target: { selector: 'text=Login' } }, entry: { kind: 'click', target: { selector: 'role=button[name="Sign in"]' } } })],
+  steps: [step(1, 'go to /login', 'passed'), step(2, 'click Sign in', 'passed')],
 };
 const wrongPw = {
   name: 'Wrong password shows an error', file: 'e2e/login/wrong-password.yaml', flow: 'Login', mode: 'replay', status: 'passed', durationMs: 2400, anomalyCount: 1,
@@ -48,10 +48,10 @@ test('lists each test with status, duration, anomalies, and the failing step inl
   assert.match(md, /❌ Pay with saved card · 0\.7s — step 2: expect shows Order confirmed · Assertion failed/);
 });
 
-test('shows healed steps and the artifact link', () => {
-  const md = buildComment([login], opts);
-  assert.match(md, /🩹 1 step healed/);
-  assert.match(md, /text=Login/);
+test('gives the exact resume command for a failed test, and links the artifact', () => {
+  const md = buildComment([login, pay], opts);
+  assert.match(md, /fix: `ete session start --from e2e\/checkout\/pay\.yaml --at 2`/);
+  assert.doesNotMatch(md, /healed/);
   assert.match(md, /https:\/\/example\.com\/artifact/);
 });
 

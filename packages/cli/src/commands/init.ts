@@ -13,9 +13,8 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      pull-requests: write
-      contents: write   # lets the action publish recordings to the ete-media branch
+      contents: write        # publish recordings to the ete-media branch
+      pull-requests: write   # post the results comment
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,9 +25,26 @@ jobs:
         with:
           # url and start default to the values in ete.yaml
           url: \${{ vars.ETE_URL }}
-        env:
-          # Only needed when a step must be resolved or healed. Fully cached runs need no key.
-          ANTHROPIC_API_KEY: \${{ secrets.ANTHROPIC_API_KEY }}
+
+  # Optional: let your coding agent fix a failing test on the PR branch. ete itself never needs
+  # credentials; this job uses whatever agent action and auth you already have. The agent follows
+  # the /ete skill: it resumes the session at the failing step, fixes it, replays, and commits.
+  # heal:
+  #   needs: e2e
+  #   if: failure() && github.event_name == 'pull_request'
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     contents: write
+  #     pull-requests: write
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         ref: \${{ github.head_ref }}
+  #     - uses: <your agent's GitHub action>   # e.g. Claude Code or Codex
+  #       with:
+  #         prompt: "Use the /ete skill. The ete E2E results comment on this PR lists a failing step and a
+  #                  'fix:' command. Resume the session with it, make the step pass, run \`ete run\`, and commit
+  #                  e2e/ (including .resolved/) to this branch."
 `;
 
 function configFor(url: string, start?: string): string {
@@ -36,12 +52,6 @@ function configFor(url: string, start?: string): string {
 url: ${url}
 ${start ? `start: ${start}` : '# start: npm run dev        # command that serves \`url\`; omit for an already-deployed URL'}
 readyTimeout: 60000          # ms to wait for \`url\` after \`start\`
-llm:
-  provider: anthropic        # anthropic | openai | google (API key comes from the environment)
-  model: claude-opus-5
-heal:
-  maxPerRun: 5               # LLM heal attempts per run
-  maxPerStep: 2
 `;
 }
 

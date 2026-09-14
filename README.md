@@ -1,10 +1,11 @@
 # ete
 
-Spin up end-to-end browser tests in minutes and run them in GitHub Actions.
+Spin up end-to-end browser tests in minutes and run them in GitHub Actions. No API key, ever.
 
-You describe a test in plain language. An LLM turns each step into a concrete browser action **once** and caches
-the result in your repo. CI replays those actions deterministically with Playwright, records video and traces,
-and only calls the LLM again when a step breaks, to self-heal. The LLM never decides whether a test passed.
+Your coding agent (Claude Code, Codex, anything with a shell) drives a real browser through `ete session`; ete records
+what worked as a plain-language test plus the exact actions. CI replays those actions deterministically with Playwright,
+records video and traces, and posts a PR comment grouped by user flow. When a step breaks, the comment carries the one
+command that lets the agent resume at that step and fix it. ete itself never calls a model.
 
 ```yaml
 # e2e/login.yaml
@@ -21,11 +22,16 @@ steps:
 
 ```bash
 npx ete init --url http://localhost:3000 --start "npm run dev"
-export ANTHROPIC_API_KEY=...                                  # only needed to explore or heal
-npx ete explore "a user can log in" --flow Login --save       # agent drives the browser, records it,
-                                                              # saves e2e/login/a-user-can-log-in.yaml + resolved actions
-npx ete run                                                   # deterministic replay, no key needed
-npx ete report                                                # timeline: video + click/assert/fail/anomaly markers
+
+npx ete session start --name "a user can log in" --flow Login    # live browser, opened at /
+npx ete session act click 'role=link[name="Log in"]'             # each act prints the page after it
+npx ete session act type 'label=Email' alice@example.com
+npx ete session act click 'role=button[name="Sign in"]'
+npx ete session expect text "Welcome, Alice"
+npx ete session save        # writes e2e/login/a-user-can-log-in.yaml + e2e/.resolved/… + recording
+
+npx ete run                 # deterministic replay
+npx ete report              # timeline: video + click/assert/fail/anomaly markers
 git add e2e && git commit -m "test: login flow"
 ```
 
@@ -39,8 +45,9 @@ unless something changes; then the run heals, reports it in the PR comment, and 
 | Command | What it does |
 |---|---|
 | `ete init` | Scaffold `ete.yaml`, `e2e/`, the workflow, and `.gitignore` entry |
-| `ete explore "<goal>" [--flow X] [--save]` | Agent drives the browser through a flow and records it; `--save` writes a replayable test |
-| `ete author "<goal>"` | Alias for `explore --save` |
+| `ete session start --name … [--flow …]` | Open a live browser to record a new test |
+| `ete session start --from <test> --at N` | Replay steps 1..N-1 of an existing test, then record from N (fix or extend) |
+| `ete session observe / act / expect / undo / status / save / abort` | Drive and finish the session |
 | `ete run [files] [--ci] [--headed] [--url] [--start]` | Replay cached steps, resolve new ones, heal broken ones, record everything |
 | `ete report [--no-open]` | Render `ete-results/` to a timeline page: video, marker rail, seek on click, anomalies |
 
@@ -50,15 +57,7 @@ unless something changes; then the run heals, reports it in the PR comment, and 
 url: http://localhost:3000
 start: npm run dev          # optional; omit for a deployed/preview URL
 readyTimeout: 60000
-llm:
-  provider: anthropic       # anthropic | openai | google
-  model: claude-opus-5
-heal:
-  maxPerRun: 5              # LLM calls per run before failing fast
-  maxPerStep: 2
 ```
-
-Keys are read from `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GOOGLE_GENERATIVE_AI_API_KEY`.
 
 ## In CI
 
@@ -67,13 +66,15 @@ Keys are read from `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GOOGLE_GENERATIVE_
   with:
     url: http://localhost:3000
     start: npm run dev
-  env:
-    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
 Each run uploads `ete-results/` as an artifact, publishes it to an `ete-media` branch in your repo, and posts one sticky
-PR comment grouped by flow: pass/fail per test, a filmstrip of the run, a link to the hosted Playwright trace viewer, and
-healed steps and anomalies. The job needs `pull-requests: write` and `contents: write`.
+PR comment grouped by flow: pass/fail per test, a filmstrip of the run, a link to the hosted Playwright trace viewer,
+anomalies, and for each failure the `fix:` command. The job needs `pull-requests: write` and `contents: write`.
+
+**Fixing failures in CI.** Nothing in ete heals by itself. `ete init` writes a commented second job that runs your own
+coding-agent action when the replay fails; the agent runs the `fix:` command, repairs the step, replays, and commits to
+the PR branch with its own credentials.
 
 For one-click timeline links, enable GitHub Pages on the `ete-media` branch and pass `pages-url`. Set `media-branch: ''`
 to keep media out of the repo; the comment then falls back to text plus the artifact link.
@@ -95,7 +96,7 @@ user flows" into recorded, replayable tests, and how to act on the PR comment.
 
 ## Design
 
-- `packages/core`: step schema, `Driver` interface, resolver (Vercel AI SDK, provider-agnostic), run loop with heal budgets, report + HTML.
+- `packages/core`: step schema, `Driver` interface, deterministic runner, session `Recorder`, timeline report.
 - `packages/driver-browser`: Playwright implementation of `Driver`.
 - `packages/cli`: `ete` binary.
 - `packages/action`: composite GitHub Action.

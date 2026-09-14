@@ -17,6 +17,11 @@ function failingStep(r) {
   return ` — step ${s.index}: ${s.kind === 'expect' ? 'expect ' : ''}${s.text}${err}`;
 }
 
+function fixHint(r) {
+  const s = r.steps.find((x) => x.status === 'failed');
+  return s ? `  fix: \`ete session start --from ${r.file} --at ${s.index}\`` : '';
+}
+
 /**
  * @param {Array} reports
  * @param {{artifactUrl: string, mediaBase?: string, timelineUrl?: string}} o
@@ -48,20 +53,11 @@ export function buildComment(reports, o) {
       if (o.mediaBase && t.recording?.tracePath) links.push(`[trace](https://trace.playwright.dev/?trace=${o.mediaBase}/${dir}/${t.recording.tracePath})`);
       const warn = t.anomalyCount ? ` · ⚠️ ${plural(t.anomalyCount, 'anomaly', 'anomalies')}` : '';
       lines.push(`${t.status === 'passed' ? '✅' : '❌'} ${t.name} · ${secs(t.durationMs)}${warn}${failingStep(t)}${links.length ? `  ${links.join(' · ')}` : ''}`);
+      if (t.status !== 'passed') lines.push(fixHint(t));
       if (o.mediaBase && t.recording?.filmstripPath) lines.push('', `![${t.name}](${o.mediaBase}/${dir}/${t.recording.filmstripPath})`, '');
     }
   }
 
-  const healed = reports.flatMap((r) => r.steps.filter((s) => s.status === 'healed' || s.status === 'resolved').map((s) => ({ test: r, step: s })));
-  if (healed.length) {
-    lines.push('', `<details><summary>🩹 ${plural(healed.length, 'step', 'steps')} healed — not persisted in CI; run <code>ete run</code> locally and commit <code>e2e/.resolved/</code></summary>`, '');
-    for (const { test, step } of healed) {
-      lines.push(`- **${test.name}** step ${step.index}: ${step.text}`);
-      if (step.healedFrom) lines.push(`  - was: \`${JSON.stringify(step.healedFrom)}\``);
-      if (step.entry) lines.push(`  - now: \`${JSON.stringify(step.entry)}\``);
-    }
-    lines.push('', '</details>');
-  }
   const anomalyList = reports.flatMap((r) => r.steps.flatMap((s) => s.anomalies.map((a) => ({ test: r, step: s, a }))));
   if (anomalyList.length) {
     lines.push('', `<details><summary>⚠️ ${plural(anomalyList.length, 'anomaly', 'anomalies')} (did not fail any test)</summary>`, '');

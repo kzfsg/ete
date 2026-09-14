@@ -13,7 +13,10 @@ describe('ete init', () => {
     expect(cfg).toContain('url: http://localhost:4000');
     expect(cfg).toContain('start: npm run dev');
     expect(await readFile(join(cwd, '.gitignore'), 'utf8')).toContain('ete-results/');
-    expect(await readFile(join(cwd, '.github/workflows/ete.yml'), 'utf8')).toContain('ANTHROPIC_API_KEY');
+    const wf = await readFile(join(cwd, '.github/workflows/ete.yml'), 'utf8');
+    expect(wf).toContain('contents: write');
+    expect(wf).not.toContain('API_KEY');
+    expect(wf).toContain('# heal:');
     expect((await stat(join(cwd, 'e2e'))).isDirectory()).toBe(true);
   });
   it('appends to an existing .gitignore and refuses to overwrite ete.yaml without --force', async () => {
