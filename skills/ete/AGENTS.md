@@ -35,7 +35,9 @@ model does it well **when the goal is precise**. Keep the judgement with the str
    loop, then `ete session save --id <slug>`. Every command takes `--id`. Sessions share the running
    app; for flows that write shared state, give each its own app with `--port <n>` (the start command
    and URL may use `{port}`). Tell subagents: one UI action per step, quote literal text, assert after
-   every transition, stop when the goal is met, and never invent a step that did not work.
+   every transition, stop when the goal is met, and never invent a step that did not work. Step text
+   (via `--as`) must read like a user's action or expectation: `click "About" in the navbar`,
+   `the page shows "Media Recognition"`, never `Verify …` or `Click on …`.
 3. **Review (strong model).** Read each saved `e2e/<flow>/<slug>.yaml`: it must reach the goal and
    contain at least one `expect`. Reject and re-record anything thin or off-goal.
 4. **Verify.** `ete run --workers 4` (or more, if tests do not share state). Everything must pass.
