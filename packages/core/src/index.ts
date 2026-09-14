@@ -4,5 +4,6 @@ export * from './cache.js';
 export * from './resolver.js';
 export * from './runner.js';
 export * from './report.js';
-export * from './author.js';
+export * from './describe.js';
 export * from './flow.js';
+export * from './explore.js';

@@ -3,7 +3,7 @@ import { Command } from 'commander';
 import { runCommand } from './commands/run.js';
 import { reportCommand } from './commands/report.js';
 import { initCommand } from './commands/init.js';
-import { authorCommand } from './commands/author.js';
+import { exploreCommand } from './commands/explore.js';
 
 const program = new Command();
 program.name('ete').description('LLM-authored, deterministically replayed E2E tests for CI').version('0.0.1');
@@ -33,17 +33,29 @@ program
     console.log('\nNext: `ete author "<what a user should be able to do>"` then `ete run`.');
   });
 
-program
-  .command('author')
-  .description('Let the LLM explore the app and draft a test for a goal')
-  .argument('<goal>', 'what a user should be able to do, e.g. "a user can log in"')
-  .option('-o, --out <path>', 'where to write the test (default: e2e/<slug>.yaml)')
-  .option('-c, --config <path>', 'path to ete.yaml', 'ete.yaml')
-  .option('--url <url>', 'override the base URL from ete.yaml')
-  .option('--headed', 'show the browser', false)
-  .option('--max-actions <n>', 'exploration budget', (v) => Number(v), 25)
+const exploreOpts = (cmd: Command) =>
+  cmd
+    .argument('<goal>', 'what a user should be able to do, e.g. "a user can log in"')
+    .option('--flow <name>', 'group this test under a user flow (also sets the e2e/ subfolder)')
+    .option('-o, --out <path>', 'where to write the test (default: e2e/<flow>/<slug>.yaml)')
+    .option('-c, --config <path>', 'path to ete.yaml', 'ete.yaml')
+    .option('--url <url>', 'override the base URL from ete.yaml')
+    .option('--headed', 'show the browser', false)
+    .option('--max-actions <n>', 'exploration budget', (v) => Number(v), 30);
+
+exploreOpts(program.command('explore'))
+  .description('Let the LLM drive the browser through a flow, recording it; --save writes a replayable test')
+  .option('--save', 'write e2e/<flow>/<slug>.yaml and its resolved actions', false)
   .action(async (goal: string, o) => {
-    await authorCommand({ cwd: process.cwd(), goal, out: o.out, config: o.config, url: o.url, headed: o.headed, maxActions: o.maxActions });
+    const { report } = await exploreCommand({ cwd: process.cwd(), goal, flow: o.flow, save: o.save, out: o.out, config: o.config, url: o.url, headed: o.headed, maxActions: o.maxActions });
+    process.exitCode = report.status === 'passed' ? 0 : 1;
+  });
+
+exploreOpts(program.command('author'))
+  .description('Alias for `explore --save`')
+  .action(async (goal: string, o) => {
+    const { report } = await exploreCommand({ cwd: process.cwd(), goal, flow: o.flow, save: true, out: o.out, config: o.config, url: o.url, headed: o.headed, maxActions: o.maxActions });
+    process.exitCode = report.status === 'passed' ? 0 : 1;
   });
 
 program

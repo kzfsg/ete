@@ -32,6 +32,14 @@ describe('writeReport / collectReports', () => {
     expect(reports.map((r) => r.name).sort()).toEqual(['Checkout', 'Login flow']);
     expect(JSON.parse(await readFile(join(root, 'login', 'report.json'), 'utf8'))).toEqual(passed);
   });
+  it('normalises phase-1 reports that lack flow, mode, anomalies', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ete-rep-'));
+    await mkdir(join(root, 'old'), { recursive: true });
+    await writeFile(join(root, 'old', 'report.json'), JSON.stringify({ name: 'Old', file: 'e2e/old.yaml', status: 'passed', durationMs: 1, recording: {}, steps: [{ index: 1, text: 'x', kind: 'action', status: 'passed', durationMs: 1 }] }));
+    const [r] = await collectReports(root);
+    expect(r).toMatchObject({ flow: 'General', mode: 'replay', anomalyCount: 0 });
+    expect(r.steps[0].anomalies).toEqual([]);
+  });
   it('returns an empty list when the root does not exist', async () => {
     expect(await collectReports(join(tmpdir(), 'ete-does-not-exist'))).toEqual([]);
   });

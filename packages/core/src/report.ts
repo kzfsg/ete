@@ -1,5 +1,6 @@
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join, parse } from 'node:path';
+import { flowFor } from './flow.js';
 import type { Report, StepReport, StepStatus } from './schema.js';
 
 /** Results subdirectory for a test file: `e2e/login.yaml` -> `login`. */
@@ -22,13 +23,25 @@ export async function collectReports(root: string): Promise<Report[]> {
   const reports: Report[] = [];
   for (const name of entries) {
     try {
-      reports.push(JSON.parse(await readFile(join(root, name, 'report.json'), 'utf8')) as Report);
+      reports.push(normaliseReport(JSON.parse(await readFile(join(root, name, 'report.json'), 'utf8'))));
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
       if (code !== 'ENOENT' && code !== 'ENOTDIR') throw err;
     }
   }
   return reports.sort((a, b) => a.flow.localeCompare(b.flow) || a.name.localeCompare(b.name));
+}
+
+/** Fills in fields that older report.json files may lack. */
+export function normaliseReport(raw: Partial<Report> & Pick<Report, 'name' | 'file' | 'status' | 'durationMs' | 'steps' | 'recording'>): Report {
+  const steps = raw.steps.map((s) => ({ ...s, anomalies: s.anomalies ?? [] }));
+  return {
+    ...raw,
+    flow: raw.flow ?? flowFor(raw.file),
+    mode: raw.mode ?? 'replay',
+    anomalyCount: raw.anomalyCount ?? steps.reduce((n, s) => n + s.anomalies.length, 0),
+    steps,
+  };
 }
 
 // ---- timeline model -------------------------------------------------------
