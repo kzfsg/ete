@@ -35,9 +35,11 @@ export function locatorFor(page: Page, selector: string): Locator {
 }
 
 export type BrowserDriverOptions = {
-  /** Per-action locator timeout. Default 5000. */
+  /** Timeout for navigations (page load). Default 30000: dev servers compile on first hit. */
+  navigationTimeoutMs?: number;
+  /** Per-action locator timeout. Default 10000. */
   actionTimeoutMs?: number;
-  /** How long an assertion polls before returning false. Default 5000. */
+  /** How long an assertion polls before returning false. Default 10000. */
   checkTimeoutMs?: number;
   viewport?: { width: number; height: number };
 };
@@ -52,13 +54,15 @@ export class BrowserDriver implements Driver {
   private anomalies: Anomaly[] = [];
   private stepStart?: number;
   private inGroup = false;
+  private readonly navigationTimeout: number;
   private readonly actionTimeout: number;
   private readonly checkTimeout: number;
   private readonly viewport: { width: number; height: number };
 
   constructor(opts: BrowserDriverOptions = {}) {
-    this.actionTimeout = opts.actionTimeoutMs ?? 5000;
-    this.checkTimeout = opts.checkTimeoutMs ?? 5000;
+    this.navigationTimeout = opts.navigationTimeoutMs ?? 30000;
+    this.actionTimeout = opts.actionTimeoutMs ?? 10000;
+    this.checkTimeout = opts.checkTimeoutMs ?? 10000;
     this.viewport = opts.viewport ?? { width: 1280, height: 800 };
   }
 
@@ -74,6 +78,7 @@ export class BrowserDriver implements Driver {
     await this.context.tracing.start({ screenshots: true, snapshots: true });
     this.page = await this.context.newPage();
     this.page.setDefaultTimeout(this.actionTimeout);
+    this.page.setDefaultNavigationTimeout(this.navigationTimeout);
     this.listen(this.page);
   }
 
@@ -87,7 +92,9 @@ export class BrowserDriver implements Driver {
 
   private listen(page: Page): void {
     page.on('console', (msg) => {
-      if (msg.type() === 'error') this.note('console-error', msg.text());
+      if (msg.type() !== 'error') return;
+      const url = msg.location()?.url;
+      this.note('console-error', url ? `${msg.text()} (${url})` : msg.text());
     });
     page.on('pageerror', (err) => this.note('page-error', err.message));
     page.on('requestfailed', (req) => this.note('request-failed', `${req.method()} ${req.url()} — ${req.failure()?.errorText ?? 'failed'}`));
@@ -148,7 +155,7 @@ export class BrowserDriver implements Driver {
     const page = this.p;
     switch (action.kind) {
       case 'navigate':
-        await page.goto(new URL(action.url, this.baseUrl).toString(), { waitUntil: 'load' });
+        await page.goto(new URL(action.url, this.baseUrl).toString(), { waitUntil: 'load', timeout: this.navigationTimeout });
         return;
       case 'click': {
         const loc = this.locate(action.target);

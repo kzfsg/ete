@@ -6,6 +6,13 @@ export const ConfigSchema = z.object({
   url: z.string().url({ message: 'url must be a full URL, e.g. http://localhost:3000' }),
   start: z.string().min(1).optional(),
   readyTimeout: z.number().int().positive().default(60000),
+  timeouts: z
+    .object({
+      navigation: z.number().int().positive().default(30000),
+      action: z.number().int().positive().default(10000),
+      assertion: z.number().int().positive().default(10000),
+    })
+    .default({ navigation: 30000, action: 10000, assertion: 10000 }),
 });
 export type Config = z.infer<typeof ConfigSchema>;
 

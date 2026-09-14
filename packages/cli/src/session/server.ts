@@ -25,7 +25,7 @@ import {
 import { createBrowserDriver } from '@ete/driver-browser';
 import { startApp, type AppHandle } from '../app.js';
 import { loadConfig } from '../config.js';
-import { RESULTS_DIR, writeFilmstrip } from '../commands/run.js';
+import { RESULTS_DIR, driverOptions, writeFilmstrip } from '../commands/run.js';
 
 export const SESSION_DIR = join(RESULTS_DIR, '.session');
 
@@ -112,7 +112,7 @@ export async function startSessionServer(o: SessionServerOptions): Promise<Sessi
   await Promise.all([rm(resultsDir, { recursive: true, force: true }), rm(join(sessionDir, 'server.json'), { force: true }), rm(join(sessionDir, 'observe.png'), { force: true })]);
 
   const app: AppHandle = await startApp({ start: cfg.start, url: baseUrl, readyTimeout: cfg.readyTimeout, log });
-  const driver = (o.createDriver ?? (() => createBrowserDriver()))();
+  const driver = (o.createDriver ?? (() => createBrowserDriver(driverOptions(cfg))))();
   const recorder = new Recorder({ driver, name, flow, testPath, baseUrl, resultsDir, headed: o.headed, prefix, log });
   try {
     await recorder.start();

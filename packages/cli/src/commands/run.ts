@@ -16,7 +16,7 @@ import {
 } from '@ete/core';
 import { createBrowserDriver, renderFilmstrip, renderPreview } from '@ete/driver-browser';
 import { startApp } from '../app.js';
-import { loadConfig } from '../config.js';
+import { loadConfig, type Config } from '../config.js';
 
 export type RunCommandOptions = {
   cwd: string;
@@ -33,6 +33,10 @@ export type RunCommandOptions = {
 };
 
 export const RESULTS_DIR = 'ete-results';
+
+export function driverOptions(cfg: Config) {
+  return { navigationTimeoutMs: cfg.timeouts.navigation, actionTimeoutMs: cfg.timeouts.action, checkTimeoutMs: cfg.timeouts.assertion };
+}
 
 /**
  * Renders the PR-comment media for a test and records it on the report:
@@ -70,7 +74,7 @@ export async function runCommand(opts: RunCommandOptions): Promise<number> {
     return 1;
   }
 
-  const createDriver = opts.createDriver ?? (() => createBrowserDriver());
+  const createDriver = opts.createDriver ?? (() => createBrowserDriver(driverOptions(cfg)));
 
   const app = await startApp({ start, url, readyTimeout: cfg.readyTimeout, log });
   const reports: Report[] = [];

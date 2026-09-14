@@ -56,6 +56,17 @@ describe('BrowserDriver', () => {
     await d.stop();
   });
 
+  it('uses separate navigation, action, and assertion timeouts', async () => {
+    const resultsDir = await mkdtemp(join(tmpdir(), 'ete-br-'));
+    const d = createBrowserDriver({ navigationTimeoutMs: 100, actionTimeoutMs: 100, checkTimeoutMs: 100 });
+    await d.start({ baseUrl, resultsDir });
+    // An unroutable address must fail within the navigation timeout, not hang.
+    const t = Date.now();
+    await expect(d.act({ kind: 'navigate', url: 'http://10.255.255.1/' })).rejects.toThrow(/Timeout|timeout|net::/);
+    expect(Date.now() - t).toBeLessThan(5000);
+    await d.stop();
+  });
+
   it('supports point targets and key presses', async () => {
     const resultsDir = await mkdtemp(join(tmpdir(), 'ete-br-'));
     const d = createBrowserDriver();

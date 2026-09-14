@@ -52,6 +52,10 @@ function configFor(url: string, start?: string): string {
 url: ${url}
 ${start ? `start: ${start}` : '# start: npm run dev        # command that serves \`url\`; omit for an already-deployed URL'}
 readyTimeout: 60000          # ms to wait for \`url\` after \`start\`
+# timeouts:                  # ms; raise these for slow dev servers or heavy pages
+#   navigation: 30000
+#   action: 10000
+#   assertion: 10000
 `;
 }
 

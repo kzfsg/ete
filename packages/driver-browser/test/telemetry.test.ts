@@ -29,6 +29,7 @@ describe('BrowserDriver telemetry', () => {
     const kinds = new Set(t1.anomalies.map((a) => a.kind));
     expect(kinds).toEqual(new Set(['console-error', 'page-error', 'http-error', 'request-failed']));
     expect(t1.anomalies.find((a) => a.kind === 'console-error')?.message).toContain('boom');
+    expect(t1.anomalies.find((a) => a.kind === 'console-error')?.message).toMatch(/\(.*noisy\.html/);
     expect(t1.anomalies.find((a) => a.kind === 'page-error')?.message).toContain('kaboom');
     expect(t1.anomalies.find((a) => a.kind === 'http-error')?.message).toMatch(/500.*\/api\/fail/);
     expect(t1.startMs).toBeGreaterThanOrEqual(0);

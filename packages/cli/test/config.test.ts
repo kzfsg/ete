@@ -11,12 +11,17 @@ describe('parseConfig', () => {
       url: 'http://localhost:3000',
       start: undefined,
       readyTimeout: 60000,
+      timeouts: { navigation: 30000, action: 10000, assertion: 10000 },
     });
   });
   it('accepts overrides', () => {
     const c = parseConfig('url: http://x\nstart: npm run dev\nreadyTimeout: 10\n');
     expect(c.start).toBe('npm run dev');
     expect(c.readyTimeout).toBe(10);
+  });
+  it('parses optional timeouts with defaults', () => {
+    expect(parseConfig('url: http://x\n').timeouts).toEqual({ navigation: 30000, action: 10000, assertion: 10000 });
+    expect(parseConfig('url: http://x\ntimeouts:\n  action: 20000\n').timeouts).toEqual({ navigation: 30000, action: 20000, assertion: 10000 });
   });
   it('ignores legacy llm/heal keys', () => {
     expect(() => parseConfig('url: http://x\nllm:\n  provider: anthropic\nheal:\n  maxPerRun: 1\n')).not.toThrow();
