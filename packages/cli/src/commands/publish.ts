@@ -66,6 +66,8 @@ export type PublishOptions = {
   retentionDays?: number;
   /** Keep at most this many runs per ref (PR/branch); older ones are pruned regardless of age. Default 5. */
   keepPerRef?: number;
+  /** Traces are the bulk of a run; upload them for failed tests only (default) or for all. */
+  traces?: 'failed' | 'all';
   now?: Date;
   log?: (line: string) => void;
 };
@@ -86,8 +88,10 @@ export async function publishRun(o: PublishOptions): Promise<PublishResult> {
     const dir = resultsDirName(r.file);
     const dirAbs = join(root, dir);
     const urls = new Map<string, string>();
+    const skipTrace = (o.traces ?? 'failed') === 'failed' && r.status === 'passed' && r.recording.tracePath;
     for (const file of await walk(dirAbs)) {
       const rel = relative(dirAbs, file).split('\\').join('/');
+      if (skipTrace && rel === r.recording.tracePath) continue;
       const ext = rel.slice(rel.lastIndexOf('.'));
       const { url } = await o.blob.put(`${prefix}${dir}/${rel}`, await readFile(file), { contentType: MIME[ext] });
       urls.set(rel, url);
@@ -187,7 +191,7 @@ export async function prune(
 }
 
 export type PublishCommandOptions = {
-  cwd: string; repo?: string; pr?: number; branch?: string; run?: string; part?: string; attempt?: string; commit?: string; site?: string; token?: string; retentionDays?: number; keepPerRef?: number; log?: (l: string) => void;
+  cwd: string; repo?: string; pr?: number; branch?: string; run?: string; part?: string; attempt?: string; commit?: string; site?: string; token?: string; retentionDays?: number; keepPerRef?: number; traces?: 'failed' | 'all'; log?: (l: string) => void;
 };
 
 /** CLI entry: fills defaults from git and GitHub Actions env, then publishes. */
@@ -206,7 +210,7 @@ export async function publishCommand(o: PublishCommandOptions): Promise<PublishR
   const runId = o.run ?? env.GITHUB_RUN_ID ?? `local-${Date.now()}`;
   return publishRun({
     cwd: o.cwd, blob: createBlobClient(token), owner, repo, ref, runId, attempt: o.attempt ?? env.GITHUB_RUN_ATTEMPT, commit: o.commit ?? env.GITHUB_SHA ?? (await gitSha(o.cwd)),
-    branch, source: env.GITHUB_ACTIONS ? 'ci' : 'local', siteUrl: site, part: o.part, retentionDays: o.retentionDays, keepPerRef: o.keepPerRef, log: o.log,
+    branch, source: env.GITHUB_ACTIONS ? 'ci' : 'local', siteUrl: site, part: o.part, retentionDays: o.retentionDays, keepPerRef: o.keepPerRef, traces: o.traces, log: o.log,
   });
 }
 

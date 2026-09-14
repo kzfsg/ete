@@ -135,3 +135,25 @@ describe('publishRun keeps only the newest N runs per ref', () => {
     expect(deleted.some((k) => k.startsWith('runs/acme/shop/pr-6/'))).toBe(false);
   });
 });
+
+describe('publishRun trace policy', () => {
+  it('uploads traces only for failed tests by default, and for all with traces: "all"', async () => {
+    const cwd = await results();
+    // the fixture test is failed, so its trace is uploaded; add a passing test whose trace must be skipped
+    const dir = join(cwd, 'ete-results', 'ok');
+    await mkdir(join(dir, 'steps'), { recursive: true });
+    await writeFile(join(dir, 'video.webm'), 'v');
+    await writeFile(join(dir, 'trace.zip'), 'z');
+    await writeFile(join(dir, 'report.json'), JSON.stringify({ name: 'Ok', file: 'e2e/ok.yaml', flow: 'F', mode: 'replay', status: 'passed', durationMs: 1, anomalyCount: 0, recording: { videoPath: 'video.webm', tracePath: 'trace.zip' }, steps: [] }));
+    const a = fakeBlob();
+    const out = await publishRun({ cwd, blob: a.client, owner: 'acme', repo: 'shop', ref: { kind: 'pr', number: 5 }, runId: '42', source: 'ci', siteUrl: 'https://s' });
+    const keys = [...a.store.keys()];
+    expect(keys).toContain('runs/acme/shop/pr-5/42/sign-in/trace.zip');
+    expect(keys).not.toContain('runs/acme/shop/pr-5/42/ok/trace.zip');
+    expect(out.manifest.tests.find((t) => t.dir === 'ok')!.blobs.trace).toBeUndefined();
+    expect(out.manifest.tests.find((t) => t.dir === 'sign-in')!.blobs.trace).toMatch(/trace\.zip$/);
+    const b = fakeBlob();
+    await publishRun({ cwd, blob: b.client, owner: 'acme', repo: 'shop', ref: { kind: 'pr', number: 5 }, runId: '42', source: 'ci', siteUrl: 'https://s', traces: 'all' });
+    expect([...b.store.keys()]).toContain('runs/acme/shop/pr-5/42/ok/trace.zip');
+  });
+});
