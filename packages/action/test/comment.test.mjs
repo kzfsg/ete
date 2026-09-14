@@ -32,7 +32,7 @@ test('groups by flow with timeline and trace links per test', () => {
   assert.match(md, /### Checkout — 0\/1 passed/);
   assert.match(md, /### Login — 2\/2 passed/);
   assert.ok(md.indexOf('### Checkout') < md.indexOf('### Login'));
-  assert.match(md, /✅ Sign in with valid credentials · 3\.1s  \[▶ timeline\]\(https:\/\/ete-shop-abc\.vercel\.app\/#sign-in\) · \[trace\]\(https:\/\/trace\.playwright\.dev\/\?trace=https:\/\/ete-shop-abc\.vercel\.app\/sign-in\/trace\.zip\)/);
+  assert.match(md, /✅ Sign in with valid credentials · 3\.1s  \[▶ play\]\(https:\/\/ete-shop-abc\.vercel\.app\/#play=sign-in\) · \[trace\]\(https:\/\/trace\.playwright\.dev\/\?trace=https:\/\/ete-shop-abc\.vercel\.app\/sign-in\/trace\.zip\)/);
   assert.match(md, /✅ Wrong password shows an error · 2\.4s · ⚠️ 1 anomaly/);
 });
 

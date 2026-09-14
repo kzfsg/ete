@@ -43,7 +43,7 @@ export function buildComment(reports, o) {
       const dir = dirOf(t);
       const links = [];
       if (o.reportUrl) {
-        links.push(`[▶ timeline](${o.reportUrl}/#${dir})`);
+        links.push(`[▶ play](${o.reportUrl}/#play=${dir})`);
         if (t.recording?.tracePath) links.push(`[trace](https://trace.playwright.dev/?trace=${o.reportUrl}/${dir}/${t.recording.tracePath})`);
       }
       const warn = t.anomalyCount ? ` · ⚠️ ${plural(t.anomalyCount, 'anomaly', 'anomalies')}` : '';

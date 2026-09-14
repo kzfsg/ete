@@ -64,3 +64,31 @@ describe('renderHtmlWith', () => {
     expect(html).toContain('Run 42');
   });
 });
+
+describe('player', () => {
+  const html = renderHtml([report]);
+  it('embeds the run data the player needs', () => {
+    const m = /<script type="application\/json" id="ete-data">([\s\S]*?)<\/script>/.exec(html);
+    expect(m).toBeTruthy();
+    const data = JSON.parse(m![1]!);
+    expect(data.tests).toHaveLength(1);
+    expect(data.tests[0]).toMatchObject({ dir: 'pay', name: 'Checkout', flow: 'Checkout', status: 'failed', video: 'pay/video.webm', total: 4000 });
+    expect(data.tests[0].steps[1]).toMatchObject({ index: 2, text: 'click Pay', status: 'passed', startMs: 500, endMs: 2000, screenshot: 'pay/steps/02.png' });
+    expect(data.tests[0].steps[1].anomalies).toEqual([{ t: 1000, kind: 'console-error', message: 'boom' }]);
+    expect(data.tests[0].steps[3]).toMatchObject({ index: 4, status: 'skipped' });
+  });
+  it('renders the player shell with a stage, reel, caption, and test rail', () => {
+    expect(html).toContain('id="player"');
+    for (const cls of ['player-stage', 'player-reel', 'player-caption', 'player-rail']) expect(html).toContain(`class="${cls}"`);
+    expect(html).toMatch(/<button class="open-player" data-dir="pay"/);
+  });
+  it('opens straight into a test from the url hash', () => {
+    expect(html).toContain("'#play='");
+  });
+  it('escapes data for safe embedding in a script tag', () => {
+    const evil = { ...report, name: 'x</script><script>alert(1)</script>' };
+    const out = renderHtml([evil]);
+    expect(out).not.toContain('</script><script>alert(1)');
+    expect(out).toContain('\\u003c/script>');
+  });
+});

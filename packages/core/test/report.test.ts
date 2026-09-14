@@ -55,7 +55,7 @@ describe('renderHtml', () => {
     expect(html).toMatch(/<video[^>]*src="login\/video\.webm"/);
   });
   it('shows one image per step screenshot, relative to the results root', () => {
-    expect(html.match(/<img /g)?.length).toBe(3);
+    expect(html.match(/<img src="[^"]*" alt="step \d+"/g)?.length).toBe(3);
     expect(html).toContain('src="checkout/steps/01.png"');
   });
   it('marks step status with a class and escapes html in step text', () => {

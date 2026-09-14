@@ -108,6 +108,39 @@ function rail(report: Report): string {
   return `<div class="rail" data-total="${total}"><div class="playhead"></div>${items}</div>`;
 }
 
+function playerData(reports: Report[], asset: AssetUrl) {
+  return {
+    tests: reports.map((r) => {
+      const dir = resultsDirName(r.file);
+      const { total } = markersFor(r);
+      return {
+        dir, name: r.name, flow: r.flow, status: r.status, durationMs: r.durationMs, anomalyCount: r.anomalyCount, total,
+        video: r.recording.videoPath ? asset(dir, r.recording.videoPath) : undefined,
+        steps: r.steps.map((st) => ({
+          index: st.index, text: st.text, kind: st.kind, status: st.status, startMs: st.startMs, endMs: st.endMs, error: st.error,
+          screenshot: st.screenshot ? asset(dir, st.screenshot) : undefined, anomalies: st.anomalies,
+        })),
+      };
+    }),
+  };
+}
+
+/** JSON safe inside a <script> element. */
+function jsonForScript(v: unknown): string {
+  return JSON.stringify(v).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+}
+
+const PLAYER_SHELL = `<div id="player" hidden aria-modal="true" role="dialog" aria-label="Recording player">
+  <div class="player-top"><span class="player-title"></span><button class="player-close" aria-label="Close player">Close</button></div>
+  <div class="player-main">
+    <div class="player-stage"><video playsinline preload="auto"></video><div class="player-empty" hidden>No video for this test.</div></div>
+    <aside class="player-rail" aria-label="Tests in this run"></aside>
+  </div>
+  <div class="player-caption"></div>
+  <div class="player-reel" tabindex="0" aria-label="Scrub through steps"><div class="reel-track"></div><div class="reel-head"></div><div class="reel-tip" hidden></div></div>
+  <div class="player-hint">space play · ← → step · ↑ ↓ test · esc close</div>
+</div>`;
+
 function testSection(r: Report, asset: AssetUrl): string {
   const dir = resultsDirName(r.file);
   const videoSrc = r.recording.videoPath ? asset(dir, r.recording.videoPath) : undefined;
@@ -119,7 +152,7 @@ function testSection(r: Report, asset: AssetUrl): string {
     : '';
   const anomalies = r.anomalyCount ? ` · <span class="warn">${r.anomalyCount} anomal${r.anomalyCount === 1 ? 'y' : 'ies'}</span>` : '';
   return `<section class="test status-${r.status}" id="${esc(dir)}">
-<h2><span class="badge">${r.status}</span> ${esc(r.name)} <span class="flow">${esc(r.flow)}</span> <small>${esc(r.file)} · ${r.mode} · ${r.durationMs} ms${anomalies}</small></h2>
+<h2><span class="badge">${r.status}</span> ${esc(r.name)} <span class="flow">${esc(r.flow)}</span> <small>${esc(r.file)} · ${r.mode} · ${r.durationMs} ms${anomalies}</small>${videoSrc ? `<button class="open-player" data-dir="${esc(dir)}">▶ Open player</button>` : ''}</h2>
 ${video}
 ${rail(r)}
 ${filmstrip}
@@ -170,6 +203,52 @@ td.idx,td.dur{color:#666;white-space:nowrap}
 .muted{color:#666;font-size:12px}
 `;
 
+const PLAYER_CSS = `
+.open-player{margin-left:auto;font:inherit;font-size:12px;padding:4px 10px;border:1px solid #cfcfcf;border-radius:999px;background:#fff;cursor:pointer}
+.open-player:hover{border-color:#111}
+h1 .open-player{margin-left:12px;vertical-align:middle}
+#player{position:fixed;inset:0;z-index:100;background:#1c1f24;color:#f3efe8;display:grid;grid-template-rows:auto 1fr auto auto auto;font-size:14px}
+#player[hidden]{display:none}
+.player-top{display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid #2c3037}
+.player-title{font-weight:500;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.player-title .st{font-size:11px;border-radius:999px;padding:2px 8px;margin-right:8px;text-transform:uppercase;letter-spacing:.03em;background:#3a3f48;color:#f3efe8}
+.player-title .st.passed{background:#1f5133;color:#b7f0c8}.player-title .st.failed{background:#5a1f1f;color:#ffb3ad}
+.player-close{font:inherit;color:#f3efe8;background:transparent;border:1px solid #454b55;border-radius:6px;padding:6px 12px;cursor:pointer}
+.player-close:hover,.player-close:focus-visible{border-color:#f3efe8;outline:none}
+.player-main{display:grid;grid-template-columns:1fr 280px;min-height:0}
+.player-stage{position:relative;display:flex;align-items:center;justify-content:center;background:#0f1114;min-height:0}
+.player-stage video{max-width:100%;max-height:100%;width:100%;height:100%;object-fit:contain;background:#0f1114;outline:none}
+.player-empty{position:absolute;color:#9aa0a8}
+.player-rail{overflow:auto;border-left:1px solid #2c3037;padding:8px}
+.rail-item{display:grid;grid-template-columns:72px 1fr;gap:10px;align-items:center;width:100%;text-align:left;font:inherit;color:inherit;background:transparent;border:1px solid transparent;border-radius:8px;padding:8px;cursor:pointer}
+.rail-item:hover{background:#252932}.rail-item[aria-current="true"]{border-color:#6b7280;background:#252932}
+.rail-item img{width:72px;aspect-ratio:16/10;object-fit:cover;border-radius:4px;background:#000}
+.rail-item .name{display:block;font-size:13px;line-height:1.3}.rail-item .meta{display:block;font-size:11px;color:#9aa0a8;margin-top:3px}
+.rail-item .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.dot.passed{background:#34c26b}.dot.failed{background:#ef5350}
+.player-caption{padding:10px 20px 4px;min-height:44px;display:flex;gap:12px;align-items:baseline}
+.player-caption .idx{color:#9aa0a8;font-variant-numeric:tabular-nums}
+.player-caption .text{font-size:16px}
+.player-caption .kind{font-size:11px;color:#c7cbd1;border:1px solid #454b55;border-radius:3px;padding:0 5px;margin-right:6px;vertical-align:middle}
+.player-caption .err{color:#ff8a80;font-family:ui-monospace,monospace;font-size:12px}
+.player-caption .anom{color:#f5c542;font-size:12px}
+.player-reel{position:relative;margin:4px 20px 8px;height:84px;background:#0f1114;border-radius:6px;overflow:hidden;cursor:ew-resize;user-select:none;outline:none}
+.player-reel:focus-visible{box-shadow:0 0 0 2px #f3efe8 inset}
+.reel-track{position:absolute;inset:0;display:flex}
+.reel-seg{position:relative;height:100%;flex:0 0 auto;border-right:1px solid #1c1f24;box-sizing:border-box;overflow:hidden;background:#23272e}
+.reel-seg img{width:100%;height:100%;object-fit:cover;object-position:top;display:block;opacity:.85}
+.reel-seg.failed{box-shadow:inset 0 0 0 2px #ef5350}
+.reel-seg.failed img{opacity:.6}
+.reel-seg.current img{opacity:1}
+.reel-seg .n{position:absolute;left:4px;top:3px;font-size:10px;line-height:1;background:rgba(0,0,0,.6);padding:2px 4px;border-radius:3px}
+.reel-seg .tick{position:absolute;bottom:0;width:3px;height:10px;background:#f5c542}
+.reel-head{position:absolute;top:0;bottom:0;width:2px;background:#f3efe8;pointer-events:none;box-shadow:0 0 0 1px rgba(0,0,0,.6)}
+.reel-tip{position:absolute;bottom:100%;transform:translate(-50%,-6px);background:#f3efe8;color:#1c1f24;font-size:12px;padding:4px 8px;border-radius:4px;white-space:nowrap;pointer-events:none}
+.player-hint{padding:0 20px 10px;font-size:11px;color:#6b7280}
+@media (max-width:800px){.player-main{grid-template-columns:1fr}.player-rail{display:none}}
+@media (prefers-reduced-motion:no-preference){.reel-seg img{transition:opacity .15s}}
+`;
+
 const JS = `
 document.querySelectorAll('section.test').forEach(function (sec) {
   var video = sec.querySelector('video'); if (!video) return;
@@ -195,16 +274,123 @@ function page(reports: Report[], asset: AssetUrl, title?: string): string {
   const anomalies = reports.reduce((n, r) => n + (r.anomalyCount ?? 0), 0);
   const heading = `ete results · ${passed}/${reports.length} passed${anomalies ? ` · <span class="warn">${anomalies} anomalies</span>` : ''}`;
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>${esc(title ?? 'ete results')}</title><style>${CSS}</style></head>
+<html lang="en"><head><meta charset="utf-8"><title>${esc(title ?? 'ete results')}</title><style>${CSS}${PLAYER_CSS}</style></head>
 <body>
-<h1>${heading}${title ? ` <small class="muted">${esc(title)}</small>` : ''}</h1>
+<h1>${heading}${title ? ` <small class="muted">${esc(title)}</small>` : ''}${reports.some((r) => r.recording.videoPath) ? ' <button class="open-player" data-dir="">▶ Open player</button>' : ''}</h1>
 ${reports.map((r) => testSection(r, asset)).join('\n')}
+${PLAYER_SHELL}
+<script type="application/json" id="ete-data">${jsonForScript(playerData(reports, asset))}</script>
 <script>${JS}</script>
+<script>${PLAYER_JS}</script>
 </body></html>
 `;
 }
 
 /** Report that references recordings as sibling files under the results root. */
+const PLAYER_JS = `
+(function () {
+  var dataEl = document.getElementById('ete-data'); if (!dataEl) return;
+  var data = JSON.parse(dataEl.textContent || '{}'); var tests = data.tests || [];
+  var root = document.getElementById('player'); if (!root || !tests.length) return;
+  var video = root.querySelector('video'), empty = root.querySelector('.player-empty');
+  var title = root.querySelector('.player-title'), rail = root.querySelector('.player-rail');
+  var caption = root.querySelector('.player-caption'), reel = root.querySelector('.player-reel');
+  var track = reel.querySelector('.reel-track'), head = reel.querySelector('.reel-head'), tip = reel.querySelector('.reel-tip');
+  var cur = -1, total = 1, segs = [], scrubbing = false, wasPlaying = false;
+
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function executed(t) { return t.steps.filter(function (s) { return s.startMs != null && s.endMs != null; }); }
+  function stepAt(t, ms) { var e = executed(t), c = null; for (var i = 0; i < e.length; i++) if (e[i].startMs <= ms) c = e[i]; return c; }
+
+  function renderRail() {
+    rail.innerHTML = tests.map(function (t, i) {
+      var shots = t.steps.filter(function (s) { return s.screenshot; }); var shot = (shots[shots.length - 1] || {}).screenshot;
+      var executedN = executed(t).length;
+      return '<button class="rail-item" data-i="' + i + '" aria-current="' + (i === cur) + '">' +
+        (shot ? '<img src="' + esc(shot) + '" alt="">' : '<span></span>') +
+        '<span><span class="name"><span class="dot ' + t.status + '"></span>' + esc(t.name) + '</span>' +
+        '<span class="meta">' + esc(t.flow) + ' · ' + executedN + ' steps · ' + (t.durationMs / 1000).toFixed(1) + 's' + (t.anomalyCount ? ' · ⚠ ' + t.anomalyCount : '') + '</span></span></button>';
+    }).join('');
+    rail.querySelectorAll('.rail-item').forEach(function (b) { b.addEventListener('click', function () { load(Number(b.dataset.i), true); }); });
+  }
+
+  function renderReel(t) {
+    var e = executed(t); track.innerHTML = ''; segs = [];
+    total = Math.max(t.total || 0, e.length ? e[e.length - 1].endMs : 0, 1);
+    e.forEach(function (s, i) {
+      var end = i + 1 < e.length ? e[i + 1].startMs : total;
+      var w = Math.max(0, end - s.startMs) / total * 100;
+      var seg = document.createElement('div');
+      seg.className = 'reel-seg' + (s.status === 'failed' ? ' failed' : ''); seg.style.width = w + '%'; seg.dataset.start = s.startMs;
+      seg.innerHTML = (s.screenshot ? '<img src="' + esc(s.screenshot) + '" alt="">' : '') + '<span class="n">' + s.index + '</span>' +
+        (s.anomalies || []).map(function (a) { return '<span class="tick" style="left:' + (Math.max(0, a.t - s.startMs) / Math.max(1, end - s.startMs) * 100) + '%" title="' + esc(a.kind + ': ' + a.message) + '"></span>'; }).join('');
+      track.appendChild(seg); segs.push({ el: seg, step: s });
+    });
+  }
+
+  function renderCaption(t, ms) {
+    var s = stepAt(t, ms); if (!s) { caption.innerHTML = '<span class="idx">' + (ms / 1000).toFixed(1) + 's</span>'; return; }
+    caption.innerHTML = '<span class="idx">' + s.index + ' / ' + executed(t).length + '</span>' +
+      '<span class="text">' + (s.kind === 'expect' ? '<span class="kind">expect</span>' : '') + esc(s.text) + '</span>' +
+      (s.error ? '<span class="err">' + esc(s.error.split('\\n')[0]) + '</span>' : '') +
+      (s.anomalies && s.anomalies.length ? '<span class="anom">⚠ ' + s.anomalies.length + ' anomal' + (s.anomalies.length === 1 ? 'y' : 'ies') + '</span>' : '');
+    segs.forEach(function (g) { g.el.classList.toggle('current', g.step === s); });
+  }
+
+  function tick() { var ms = video.currentTime * 1000; head.style.left = Math.min(100, ms / total * 100) + '%'; renderCaption(tests[cur], ms); }
+
+  function load(i, play) {
+    cur = i; var t = tests[i];
+    title.innerHTML = '<span class="st ' + t.status + '">' + t.status + '</span>' + esc(t.name) + ' <span style="color:#9aa0a8">· ' + esc(t.flow) + '</span>';
+    renderRail(); renderReel(t);
+    if (t.video) { empty.hidden = true; video.src = t.video; video.currentTime = 0; if (play) video.play().catch(function () {}); }
+    else { empty.hidden = false; video.removeAttribute('src'); video.load(); }
+    tick(); history.replaceState(null, '', '#play=' + encodeURIComponent(t.dir));
+  }
+
+  function open(dir, play) {
+    var i = Math.max(0, tests.findIndex(function (t) { return t.dir === dir; }));
+    root.hidden = false; document.body.style.overflow = 'hidden'; load(i, play !== false);
+    reel.focus({ preventScroll: true });
+  }
+  function close() { video.pause(); root.hidden = true; document.body.style.overflow = ''; history.replaceState(null, '', location.pathname + location.search + (tests[cur] ? '#' + tests[cur].dir : '')); }
+
+  function seekFromEvent(ev) {
+    var r = reel.getBoundingClientRect(); var x = Math.min(Math.max(0, ev.clientX - r.left), r.width);
+    var ms = x / r.width * total; video.currentTime = ms / 1000; tick();
+    var s = stepAt(tests[cur], ms); tip.hidden = false; tip.style.left = x + 'px';
+    tip.textContent = (ms / 1000).toFixed(1) + 's' + (s ? ' · ' + s.index + '. ' + s.text : '');
+  }
+  reel.addEventListener('pointerdown', function (ev) { ev.preventDefault(); scrubbing = true; wasPlaying = !video.paused; video.pause(); seekFromEvent(ev); });
+  window.addEventListener('pointermove', function (ev) { if (scrubbing) seekFromEvent(ev); });
+  window.addEventListener('pointerup', function () { if (!scrubbing) return; scrubbing = false; if (wasPlaying) video.play().catch(function () {}); });
+  reel.addEventListener('pointermove', function (ev) { if (scrubbing) return; var r = reel.getBoundingClientRect(); var x = ev.clientX - r.left; var s = stepAt(tests[cur], x / r.width * total); tip.hidden = false; tip.style.left = x + 'px'; tip.textContent = s ? s.index + '. ' + s.text : ''; });
+  reel.addEventListener('pointerleave', function () { if (!scrubbing) tip.hidden = true; });
+  video.addEventListener('timeupdate', tick);
+  video.addEventListener('loadedmetadata', function () { if (isFinite(video.duration)) total = Math.max(total, video.duration * 1000); tick(); });
+  video.addEventListener('click', function () { video.paused ? video.play() : video.pause(); });
+
+  function jumpStep(delta) {
+    var e = executed(tests[cur]); if (!e.length) return; var ms = video.currentTime * 1000;
+    var i = e.findIndex(function (s) { return s.startMs > ms + 1; }); var curI = (i === -1 ? e.length : i) - 1;
+    var next = Math.min(e.length - 1, Math.max(0, curI + delta)); video.currentTime = e[next].startMs / 1000; tick();
+  }
+  document.addEventListener('keydown', function (ev) {
+    if (root.hidden) return;
+    if (ev.key === 'Escape') { close(); }
+    else if (ev.key === ' ') { ev.preventDefault(); video.paused ? video.play() : video.pause(); }
+    else if (ev.key === 'ArrowRight') { ev.preventDefault(); jumpStep(1); }
+    else if (ev.key === 'ArrowLeft') { ev.preventDefault(); jumpStep(-1); }
+    else if (ev.key === 'ArrowDown') { ev.preventDefault(); load(Math.min(tests.length - 1, cur + 1), true); }
+    else if (ev.key === 'ArrowUp') { ev.preventDefault(); load(Math.max(0, cur - 1), true); }
+  });
+  root.querySelector('.player-close').addEventListener('click', close);
+  document.querySelectorAll('.open-player').forEach(function (b) { b.addEventListener('click', function () { open(b.dataset.dir || tests[0].dir); }); });
+  var m = /[#&]play=([^&]+)/.exec(location.hash); if (m) open(decodeURIComponent(m[1]), false);
+  var m2 = /^#play=/.test(location.hash); void m2; // '#play=' is the deep link format
+})();
+`;
+
 export function renderHtml(reports: Report[], title?: string): string {
   return page(reports, relativeAsset, title);
 }
