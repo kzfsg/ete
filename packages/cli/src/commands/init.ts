@@ -15,6 +15,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      contents: write   # lets the action publish recordings to the ete-media branch
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

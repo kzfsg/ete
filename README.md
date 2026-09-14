@@ -21,12 +21,15 @@ steps:
 
 ```bash
 npx ete init --url http://localhost:3000 --start "npm run dev"
-export ANTHROPIC_API_KEY=...          # only needed to resolve new steps or heal broken ones
-npx ete author "a user can log in"    # LLM explores your app and drafts e2e/a-user-can-log-in.yaml
-npx ete run                           # resolves steps, records video/trace, writes e2e/.resolved/
-npx ete report                        # opens ete-results/index.html
+export ANTHROPIC_API_KEY=...                                  # only needed to explore or heal
+npx ete explore "a user can log in" --flow Login --save       # agent drives the browser, records it,
+                                                              # saves e2e/login/a-user-can-log-in.yaml + resolved actions
+npx ete run                                                   # deterministic replay, no key needed
+npx ete report                                                # timeline: video + click/assert/fail/anomaly markers
 git add e2e && git commit -m "test: login flow"
 ```
+
+In Claude Code, `/ete build 3 user flows, from login to checkout` does all of this for you (see `skills/ete`).
 
 `ete init` also writes `.github/workflows/ete.yml`. Because `e2e/.resolved/` is committed, CI runs need **no API key**
 unless something changes; then the run heals, reports it in the PR comment, and you persist the fix locally.
@@ -36,9 +39,10 @@ unless something changes; then the run heals, reports it in the PR comment, and 
 | Command | What it does |
 |---|---|
 | `ete init` | Scaffold `ete.yaml`, `e2e/`, the workflow, and `.gitignore` entry |
-| `ete author "<goal>"` | LLM explores the running app and drafts a test file |
+| `ete explore "<goal>" [--flow X] [--save]` | Agent drives the browser through a flow and records it; `--save` writes a replayable test |
+| `ete author "<goal>"` | Alias for `explore --save` |
 | `ete run [files] [--ci] [--headed] [--url] [--start]` | Replay cached steps, resolve new ones, heal broken ones, record everything |
-| `ete report [--no-open]` | Render `ete-results/` to one HTML page |
+| `ete report [--no-open]` | Render `ete-results/` to a timeline page: video, marker rail, seek on click, anomalies |
 
 ## Config (`ete.yaml`)
 
@@ -67,16 +71,27 @@ Keys are read from `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GOOGLE_GENERATIVE_
     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-Each run uploads `ete-results/` (video, trace, per-step screenshots, `report.json`) as an artifact and posts one sticky
-PR comment with per-test status, failed steps with errors, and any healed steps with before/after actions.
+Each run uploads `ete-results/` as an artifact, publishes it to an `ete-media` branch in your repo, and posts one sticky
+PR comment grouped by flow: pass/fail per test, a filmstrip of the run, a link to the hosted Playwright trace viewer, and
+healed steps and anomalies. The job needs `pull-requests: write` and `contents: write`.
 
-**Limitation:** GitHub does not render images in comments posted by Actions, so screenshots and video are viewed by
-downloading the artifact, `npx playwright show-trace <test>/trace.zip`, or `npx ete report` locally.
+For one-click timeline links, enable GitHub Pages on the `ete-media` branch and pass `pages-url`. Set `media-branch: ''`
+to keep media out of the repo; the comment then falls back to text plus the artifact link.
+
+**Why not the video itself in the comment?** GitHub only renders media in comments when it is hosted at a fetchable URL,
+and workflows cannot upload comment attachments. The media branch is the closest thing to inline playback CI can offer.
+
+## Flows, timeline, anomalies
+
+- `flow:` in a test file (or its `e2e/<flow>/` directory) groups tests in output and in the PR comment.
+- Every step records its start and end against the video, so the timeline can seek to any click, assertion, or failure.
+- Anomalies are console errors, page exceptions, failed requests, 5xx responses, and unexpected dialogs seen during a
+  step. They are shown as yellow markers and listed in the comment. They never fail a test.
 
 ## For coding agents
 
-`skills/ete-author/SKILL.md` (Claude Code) and `skills/ete-author/AGENTS.md` (Codex and others) teach an agent the
-author → run → review → commit loop and the step-writing rules.
+`skills/ete/SKILL.md` (Claude Code) and `skills/ete/AGENTS.md` (Codex and others) teach an agent to turn "build these
+user flows" into recorded, replayable tests, and how to act on the PR comment.
 
 ## Design
 
@@ -86,5 +101,5 @@ author → run → review → commit loop and the step-writing rules.
 - `packages/action`: composite GitHub Action.
 - `fixtures/demo-app`: tiny app used by the integration tests and this repo's own self-test workflow.
 
-Phase 2 adds a desktop driver behind the same `Driver` interface using point targets. Phase 3 is a hosted dashboard for
-run history and shareable recordings. Full spec in `docs/superpowers/specs/2026-09-14-ete-design.md`.
+Next: a desktop driver behind the same `Driver` interface using point targets, then a hosted dashboard for run history.
+Specs in `docs/superpowers/specs/`.

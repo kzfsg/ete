@@ -10,6 +10,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      contents: write
     steps:
       - uses: actions/checkout@v4
       # Runs this repo's own e2e/ tests against the demo fixture through the action.

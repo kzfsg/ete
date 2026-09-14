@@ -1,4 +1,5 @@
-name: Login flow
+name: Sign in with valid credentials
+flow: Login
 steps:
   - go to /login.html
   - type "alice@example.com" into the email field
