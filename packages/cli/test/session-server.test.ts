@@ -69,6 +69,7 @@ describe('session server', () => {
       expect(resolved.steps[hashStep('the page shows "Welcome, Alice"')]).toEqual({ kind: 'textVisible', text: 'Welcome, Alice' });
       const report = JSON.parse(await readFile(join(cwd, 'ete-results/a-user-can-log-in/report.json'), 'utf8'));
       expect(report.recording.filmstripPath).toBe('filmstrip.png');
+      expect(report.recording.previewPath).toBe('preview.png');
       expect(report.steps.length).toBe(5);
     } finally {
       await s.close();

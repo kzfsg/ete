@@ -21,7 +21,8 @@
   },
   "dependencies": {
     "@ete/core": "workspace:*",
-    "playwright": "^1.63.0"
+    "playwright": "^1.63.0",
+    "playwright-core": "1.63.0"
   },
   "devDependencies": {
     "fflate": "^0.8.3"

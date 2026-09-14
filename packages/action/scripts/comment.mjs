@@ -54,7 +54,8 @@ export function buildComment(reports, o) {
       const warn = t.anomalyCount ? ` · ⚠️ ${plural(t.anomalyCount, 'anomaly', 'anomalies')}` : '';
       lines.push(`${t.status === 'passed' ? '✅' : '❌'} ${t.name} · ${secs(t.durationMs)}${warn}${failingStep(t)}${links.length ? `  ${links.join(' · ')}` : ''}`);
       if (t.status !== 'passed') lines.push(fixHint(t));
-      if (o.mediaBase && t.recording?.filmstripPath) lines.push('', `![${t.name}](${o.mediaBase}/${dir}/${t.recording.filmstripPath})`, '');
+      const preview = t.recording?.previewPath || t.recording?.filmstripPath;
+      if (o.mediaBase && preview) lines.push('', `![${t.name}](${o.mediaBase}/${dir}/${preview})`, '');
     }
   }
 

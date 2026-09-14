@@ -14,7 +14,7 @@ import {
   type Driver,
   type Report,
 } from '@ete/core';
-import { createBrowserDriver, renderFilmstrip } from '@ete/driver-browser';
+import { createBrowserDriver, renderFilmstrip, renderPreview } from '@ete/driver-browser';
 import { startApp } from '../app.js';
 import { loadConfig } from '../config.js';
 
@@ -34,17 +34,26 @@ export type RunCommandOptions = {
 
 export const RESULTS_DIR = 'ete-results';
 
-/** Renders filmstrip.png from the step screenshots and records it on the report. */
+/**
+ * Renders the PR-comment media for a test and records it on the report:
+ * filmstrip.png (one frame per step) and preview.png (animated PNG of the video).
+ * Neither may ever fail a run.
+ */
 export async function writeFilmstrip(resultsDir: string, report: Report): Promise<void> {
   const frames = report.steps
     .filter((s) => s.screenshot)
     .map((s) => ({ path: join(resultsDir, s.screenshot!), index: s.index, failed: s.status === 'failed' }));
-  if (frames.length === 0) return;
-  try {
-    const { frames: n } = await renderFilmstrip({ frames, out: join(resultsDir, 'filmstrip.png') });
-    if (n > 0) report.recording.filmstripPath = 'filmstrip.png';
-  } catch {
-    /* a missing filmstrip must never fail a run */
+  if (frames.length > 0) {
+    try {
+      const { frames: n } = await renderFilmstrip({ frames, out: join(resultsDir, 'filmstrip.png') });
+      if (n > 0) report.recording.filmstripPath = 'filmstrip.png';
+    } catch {
+      /* ignore */
+    }
+  }
+  if (report.recording.videoPath) {
+    const res = await renderPreview({ video: join(resultsDir, report.recording.videoPath), out: join(resultsDir, 'preview.png') });
+    if (res.ok) report.recording.previewPath = 'preview.png';
   }
 }
 

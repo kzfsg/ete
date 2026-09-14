@@ -49,6 +49,8 @@ describe('ete run', () => {
       expect(report.steps.map((s: { status: string }) => s.status)).toEqual(['passed', 'passed', 'passed', 'passed']);
       expect((await stat(join(cwd, 'ete-results', 'login', 'video.webm'))).size).toBeGreaterThan(0);
       expect((await stat(join(cwd, 'ete-results', 'login', 'steps', '04.png'))).size).toBeGreaterThan(0);
+      expect(report.recording.previewPath).toBe('preview.png');
+      expect((await stat(join(cwd, 'ete-results', 'login', 'preview.png'))).size).toBeGreaterThan(1000);
       expect(lines.join('\n')).toMatch(/✓ 4\./);
     }
   });

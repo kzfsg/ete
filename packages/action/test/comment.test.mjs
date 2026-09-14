@@ -35,9 +35,10 @@ test('groups tests by flow with per-flow counts and links', () => {
   assert.match(md, /\[trace\]\(https:\/\/trace\.playwright\.dev\/\?trace=https:\/\/raw\.githubusercontent\.com\/acme\/shop\/ete-media\/runs\/1-1\/pay\/trace\.zip\)/);
 });
 
-test('embeds one filmstrip per test when media is published', () => {
-  const md = buildComment([login, pay], opts);
-  assert.match(md, /!\[Sign in with valid credentials\]\(https:\/\/raw\.githubusercontent\.com\/acme\/shop\/ete-media\/runs\/1-1\/sign-in\/filmstrip\.png\)/);
+test('embeds the animated preview per test when media is published, else the filmstrip', () => {
+  const withPreview = { ...login, recording: { ...login.recording, previewPath: 'preview.png' } };
+  const md = buildComment([withPreview, pay], opts);
+  assert.match(md, /!\[Sign in with valid credentials\]\(https:\/\/raw\.githubusercontent\.com\/acme\/shop\/ete-media\/runs\/1-1\/sign-in\/preview\.png\)/);
   assert.match(md, /!\[Pay with saved card\]\([^)]*\/pay\/filmstrip\.png\)/);
 });
 

@@ -50,7 +50,7 @@ export function parseTestFile(yamlText: string): TestFile {
 }
 
 export type Observation = { screenshotPng: Buffer; a11yTree?: string; url?: string };
-export type Recording = { videoPath?: string; tracePath?: string; filmstripPath?: string };
+export type Recording = { videoPath?: string; tracePath?: string; filmstripPath?: string; previewPath?: string };
 
 export type AnomalyKind = 'console-error' | 'page-error' | 'request-failed' | 'http-error' | 'dialog';
 export type Anomaly = {

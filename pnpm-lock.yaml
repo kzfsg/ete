@@ -60,6 +60,9 @@ importers:
       playwright:
         specifier: ^1.63.0
         version: 1.63.0
+      playwright-core:
+        specifier: 1.63.0
+        version: 1.63.0
     devDependencies:
       fflate:
         specifier: ^0.8.3
