@@ -13,7 +13,7 @@ th{text-align:left;color:#666;font-weight:500;font-size:12px;padding:8px 10px;ba
 td{padding:8px 10px;border-top:1px solid #eee;vertical-align:middle}
 td a{color:#1a1a1a;text-decoration:none;font-weight:500}td a:hover{text-decoration:underline}
 .badge{font-size:11px;border-radius:999px;padding:2px 8px;background:#e5e5e5;text-transform:uppercase;letter-spacing:.03em}
-.passed{background:#d4f4dd;color:#146c2e}.failed{background:#fee2e2;color:#991b1b}
+.badge.passed{background:#d4f4dd;color:#146c2e}.badge.failed{background:#fee2e2;color:#991b1b}
 .muted{color:#666;font-size:12px}.warn{color:#92400e}.empty{padding:32px;text-align:center;color:#666;background:#fff;border:1px dashed #ddd;border-radius:8px}
 code{font-family:ui-monospace,monospace;font-size:12px;background:#eee;padding:1px 4px;border-radius:3px}
 `;
