@@ -18,6 +18,7 @@
   "dependencies": {
     "@ete/core": "workspace:*",
     "@ete/driver-browser": "workspace:*",
+    "@vercel/blob": "^2.8.0",
     "commander": "^14.0.0",
     "fast-glob": "^3.3.3",
     "yaml": "^2.8.2",

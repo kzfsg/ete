@@ -14,7 +14,7 @@ import {
   type Driver,
   type Report,
 } from '@ete/core';
-import { createBrowserDriver, renderFilmstrip, renderPreview } from '@ete/driver-browser';
+import { createBrowserDriver, renderFilmstrip } from '@ete/driver-browser';
 import { startApp } from '../app.js';
 import { loadConfig, type Config } from '../config.js';
 
@@ -38,11 +38,7 @@ export function driverOptions(cfg: Config) {
   return { navigationTimeoutMs: cfg.timeouts.navigation, actionTimeoutMs: cfg.timeouts.action, checkTimeoutMs: cfg.timeouts.assertion };
 }
 
-/**
- * Renders the PR-comment media for a test and records it on the report:
- * filmstrip.png (one frame per step) and preview.png (animated PNG of the video).
- * Neither may ever fail a run.
- */
+/** Renders filmstrip.png (one frame per step) and records it on the report. Never fails a run. */
 export async function writeFilmstrip(resultsDir: string, report: Report): Promise<void> {
   const frames = report.steps
     .filter((s) => s.screenshot)
@@ -54,10 +50,6 @@ export async function writeFilmstrip(resultsDir: string, report: Report): Promis
     } catch {
       /* ignore */
     }
-  }
-  if (report.recording.videoPath) {
-    const res = await renderPreview({ video: join(resultsDir, report.recording.videoPath), out: join(resultsDir, 'preview.png') });
-    if (res.ok) report.recording.previewPath = 'preview.png';
   }
 }
 

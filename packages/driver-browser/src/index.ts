@@ -13,8 +13,6 @@ import type {
 } from '@ete/core';
 
 export { renderFilmstrip, sampleFrames } from './filmstrip.js';
-export { renderPreview, ffmpegPath } from './preview.js';
-export { buildApng, apngFrameCount } from './apng.js';
 
 const MAX_MESSAGE = 500;
 const oneLine = (s: string) => s.replace(/\s+/g, ' ').trim().slice(0, MAX_MESSAGE);

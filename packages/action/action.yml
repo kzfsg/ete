@@ -1,5 +1,5 @@
 name: 'ete E2E tests'
-description: 'Run LLM-authored, deterministically replayed E2E tests with self-heal, recordings, and a PR comment'
+description: 'Replay agent-recorded E2E tests with recordings, publish them to your central ete reports site, and comment on the PR'
 author: 'kzfsg'
 branding:
   icon: 'check-circle'
@@ -32,18 +32,18 @@ inputs:
     description: 'Node version to use'
     required: false
     default: '22'
-  media-branch:
-    description: 'Branch to publish recordings to so the PR comment can embed filmstrips and link traces. Empty disables publishing. Needs contents: write.'
-    required: false
-    default: 'ete-media'
-  media-retention-days:
-    description: 'Prune published runs older than this many days'
-    required: false
-    default: '30'
-  pages-url:
-    description: 'Base URL where the media branch is served (GitHub Pages). Enables direct timeline links in the comment.'
+  blob-token:
+    description: 'Vercel Blob read-write token of the central ete reports store. When set with site-url, results are published and the PR comment links into the site.'
     required: false
     default: ''
+  site-url:
+    description: 'URL of the central ete reports site, e.g. https://ete-reports.vercel.app'
+    required: false
+    default: ''
+  retention-days:
+    description: "Prune this repository's published runs older than this many days"
+    required: false
+    default: '30'
 
 outputs:
   outcome:
@@ -96,35 +96,14 @@ runs:
         if-no-files-found: ignore
         retention-days: 14
 
-    - name: Render report
-      if: always()
-      shell: bash
-      working-directory: ${{ inputs.working-directory }}
-      run: |
-        TITLE="${{ github.repository }} · ${{ github.event_name == 'pull_request' && format('PR #{0}', github.event.pull_request.number) || github.ref_name }} · run ${{ github.run_id }}"
-        node "$ETE_BIN" report --no-open --standalone --title "$TITLE" || true
-
-    - name: Upload self-contained report
-      id: report
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: ete-report-${{ github.run_id }}-${{ github.run_attempt }}
-        path: ${{ inputs.working-directory }}/ete-results/ete-report.html
-        if-no-files-found: ignore
-        retention-days: 14
-
-    - name: Publish recordings to media branch
-      id: publish
-      if: always() && inputs.media-branch != ''
+    - name: Publish to the reports site
+      if: always() && inputs.blob-token != '' && inputs.site-url != ''
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
-        GITHUB_TOKEN: ${{ github.token }}
-        MEDIA_BRANCH: ${{ inputs.media-branch }}
-        MEDIA_RETENTION_DAYS: ${{ inputs.media-retention-days }}
-        PAGES_URL: ${{ inputs.pages-url }}
-      run: node "${{ github.action_path }}/scripts/publish.mjs"
+        BLOB_READ_WRITE_TOKEN: ${{ inputs.blob-token }}
+        ETE_SITE_URL: ${{ inputs.site-url }}
+      run: node "$ETE_BIN" publish --retention-days "${{ inputs.retention-days }}"
 
     - name: Comment on PR
       if: always() && inputs.comment == 'true' && github.event_name == 'pull_request'
@@ -134,8 +113,7 @@ runs:
         GITHUB_TOKEN: ${{ github.token }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
         ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
-        REPORT_URL: ${{ steps.report.outputs.artifact-url }}
-        # MEDIA_BASE / TIMELINE_URL are exported by publish.mjs via GITHUB_ENV
+        # REPORT_URL is exported by `ete publish` via GITHUB_ENV
       run: node "${{ github.action_path }}/scripts/comment.mjs"
 
     - name: Fail if tests failed

@@ -5,37 +5,14 @@ import { join, parse } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const MARKER = '<!-- ete-report -->';
-const ICON = { passed: '✅', resolved: '🆕', healed: '🩹', failed: '❌', skipped: '⏭️' };
+const ICON = { passed: '✅', failed: '❌', skipped: '⏭️' };
 const secs = (ms) => `${(ms / 1000).toFixed(1)}s`;
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const dirOf = (r) => parse(r.file).name;
 
 /**
- * Image URL that renders in comments on private repos too: GitHub leaves same-repo
- * `github.com/<owner>/<repo>/raw/<branch>/...` links unproxied, so the viewer's own session
- * fetches them. raw.githubusercontent.com only works for public repos.
- */
-export function imageUrl(mediaBase, path) {
-  const m = /^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/(.+)$/.exec(mediaBase);
-  const base = m ? `https://github.com/${m[1]}/${m[2]}/raw/${m[3]}` : mediaBase;
-  return `${base}/${path}`;
-}
-
-function failingStep(r) {
-  const s = r.steps.find((x) => x.status === 'failed');
-  if (!s) return '';
-  const err = s.error ? ` · ${s.error.split('\n')[0]}` : '';
-  return ` — step ${s.index}: ${s.kind === 'expect' ? 'expect ' : ''}${s.text}${err}`;
-}
-
-function fixHint(r) {
-  const s = r.steps.find((x) => x.status === 'failed');
-  return s ? `  fix: \`ete session start --from ${r.file} --at ${s.index}\`` : '';
-}
-
-/**
  * @param {Array} reports
- * @param {{artifactUrl: string, reportUrl?: string, mediaBase?: string, timelineUrl?: string}} o
+ * @param {{artifactUrl: string, reportUrl?: string, run?: {id?: string, attempt?: string, at?: string}}} o
  */
 export function buildComment(reports, o) {
   const lines = [MARKER, '## 🧪 ete E2E results', ''];
@@ -45,7 +22,12 @@ export function buildComment(reports, o) {
   }
   const passed = reports.filter((r) => r.status === 'passed').length;
   const anomalies = reports.reduce((n, r) => n + (r.anomalyCount ?? 0), 0);
-  lines.push(`**${passed}/${reports.length} passed${anomalies ? ` · ${plural(anomalies, 'anomaly', 'anomalies')}` : ''}**`);
+  const headline = `**${passed}/${reports.length} passed${anomalies ? ` · ${plural(anomalies, 'anomaly', 'anomalies')}` : ''}**`;
+  lines.push(o.reportUrl ? `${headline} · **[▶ open report](${o.reportUrl})**` : headline);
+  if (o.run?.at || o.run?.id) {
+    const when = o.run.at ? new Date(o.run.at).toISOString().replace('T', ' ').slice(0, 16) + ' UTC' : '';
+    lines.push(`<sub>Updated ${when}${o.run.id ? ` · run ${o.run.id}${o.run.attempt && o.run.attempt !== '1' ? ` (attempt ${o.run.attempt})` : ''}` : ''}</sub>`);
+  }
 
   const flows = new Map();
   for (const r of reports) {
@@ -60,25 +42,30 @@ export function buildComment(reports, o) {
     for (const t of tests) {
       const dir = dirOf(t);
       const links = [];
-      if (o.timelineUrl) links.push(`[▶ timeline](${o.timelineUrl}#${dir})`);
-      if (o.mediaBase && t.recording?.tracePath) links.push(`[trace](https://trace.playwright.dev/?trace=${o.mediaBase}/${dir}/${t.recording.tracePath})`);
+      if (o.reportUrl) {
+        links.push(`[▶ timeline](${o.reportUrl}/#${dir})`);
+        if (t.recording?.tracePath) links.push(`[trace](https://trace.playwright.dev/?trace=${o.reportUrl}/${dir}/${t.recording.tracePath})`);
+      }
       const warn = t.anomalyCount ? ` · ⚠️ ${plural(t.anomalyCount, 'anomaly', 'anomalies')}` : '';
-      lines.push(`${t.status === 'passed' ? '✅' : '❌'} ${t.name} · ${secs(t.durationMs)}${warn}${failingStep(t)}${links.length ? `  ${links.join(' · ')}` : ''}`);
-      if (t.status !== 'passed') lines.push(fixHint(t));
-      const preview = t.recording?.previewPath || t.recording?.filmstripPath;
-      if (o.mediaBase && preview) lines.push('', `![${t.name}](${imageUrl(o.mediaBase, `${dir}/${preview}`)})`, '');
+      lines.push(`${t.status === 'passed' ? '✅' : '❌'} ${t.name} · ${secs(t.durationMs)}${warn}${links.length ? `  ${links.join(' · ')}` : ''}`);
+      const failed = t.steps.find((s) => s.status === 'failed');
+      if (failed) {
+        const err = failed.error ? ` · ${failed.error.split('\n')[0]}` : '';
+        lines.push(`  - step ${failed.index}: ${failed.kind === 'expect' ? 'expect ' : ''}${failed.text}${err}`);
+        lines.push(`  - fix: \`ete session start --from ${t.file} --at ${failed.index}\``);
+        if (o.reportUrl && failed.screenshot) lines.push('', `  ![step ${failed.index}](${o.reportUrl}/${dir}/${failed.screenshot})`, '');
+      }
     }
   }
 
-  const anomalyList = reports.flatMap((r) => r.steps.flatMap((s) => s.anomalies.map((a) => ({ test: r, step: s, a }))));
+  const anomalyList = reports.flatMap((r) => r.steps.flatMap((s) => (s.anomalies ?? []).map((a) => ({ test: r, step: s, a }))));
   if (anomalyList.length) {
     lines.push('', `<details><summary>⚠️ ${plural(anomalyList.length, 'anomaly', 'anomalies')} (did not fail any test)</summary>`, '');
     for (const { test, step, a } of anomalyList.slice(0, 30)) lines.push(`- **${test.name}** step ${step.index} · \`${a.kind}\` ${a.message}`);
     if (anomalyList.length > 30) lines.push(`- … and ${anomalyList.length - 30} more`);
     lines.push('', '</details>');
   }
-  if (o.reportUrl) lines.push('', `📊 **[Open the full report](${o.reportUrl})** — one HTML file with every recording playable and scrubbable by step. Download, unzip, open.`);
-  lines.push('', `📦 [Download full videos & traces](${o.artifactUrl}) · view a trace with \`npx playwright show-trace <test>/trace.zip\`, or the whole run with \`npx ete report\`.`);
+  lines.push('', `📦 [Raw videos, traces & screenshots](${o.artifactUrl})${o.reportUrl ? '' : ' · view a trace with `npx playwright show-trace <test>/trace.zip`, or the whole run with `npx ete report`'}.`);
   return lines.join('\n');
 }
 
@@ -111,8 +98,7 @@ export async function main(env = process.env) {
   const body = buildComment(await collect(env.RESULTS_DIR || 'ete-results'), {
     artifactUrl,
     reportUrl: env.REPORT_URL || undefined,
-    mediaBase: env.MEDIA_BASE || undefined,
-    timelineUrl: env.TIMELINE_URL || undefined,
+    run: { id: env.GITHUB_RUN_ID, attempt: env.GITHUB_RUN_ATTEMPT, at: new Date().toISOString() },
   });
   const apiBase = env.GITHUB_API_URL ?? 'https://api.github.com';
   const api = `${apiBase}/repos/${repo}/issues/${pr}/comments`;

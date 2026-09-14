@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "jsx": "preserve", "module": "esnext", "moduleResolution": "bundler", "noEmit": true, "allowJs": true, "incremental": true, "plugins": [{ "name": "next" }], "types": ["node"] },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules"]
+}

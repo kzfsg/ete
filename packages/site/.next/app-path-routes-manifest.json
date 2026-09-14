@@ -1,0 +1,8 @@
+{
+  "/[owner]/[repo]/[ref]/[run]/route": "/[owner]/[repo]/[ref]/[run]",
+  "/[owner]/[repo]/[ref]/route": "/[owner]/[repo]/[ref]",
+  "/[owner]/[repo]/route": "/[owner]/[repo]",
+  "/_global-error/page": "/_global-error",
+  "/_not-found/page": "/_not-found",
+  "/route": "/"
+}

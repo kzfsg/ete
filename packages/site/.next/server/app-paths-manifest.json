@@ -1,0 +1,8 @@
+{
+  "/[owner]/[repo]/[ref]/[run]/route": "app/[owner]/[repo]/[ref]/[run]/route.js",
+  "/[owner]/[repo]/[ref]/route": "app/[owner]/[repo]/[ref]/route.js",
+  "/[owner]/[repo]/route": "app/[owner]/[repo]/route.js",
+  "/_global-error/page": "app/_global-error/page.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/route": "app/route.js"
+}

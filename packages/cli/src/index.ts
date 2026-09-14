@@ -2,6 +2,7 @@
 import { Command } from 'commander';
 import { runCommand } from './commands/run.js';
 import { reportCommand } from './commands/report.js';
+import { publishCommand } from './commands/publish.js';
 import { initCommand } from './commands/init.js';
 import { sessionAbort, sessionAct, sessionExpect, sessionObserve, sessionSave, sessionServe, sessionStart, sessionStatus, sessionUndo } from './commands/session.js';
 import { fileURLToPath } from 'node:url';
@@ -99,6 +100,21 @@ program
   .action(async (o) => {
     const out = await reportCommand({ cwd: process.cwd(), open: o.open, standalone: o.standalone, title: o.title });
     console.log(out.standalone ?? out.index);
+  });
+
+program
+  .command('publish')
+  .description('Upload ete-results/ to the central reports site (needs BLOB_READ_WRITE_TOKEN and --site or ETE_SITE_URL)')
+  .option('--site <url>', 'reports site URL')
+  .option('--repo <owner/name>', 'repository (default: from GitHub env or git remote)')
+  .option('--pr <n>', 'pull request number', (v) => Number(v))
+  .option('--branch <name>', 'branch name when not a PR')
+  .option('--run <id>', 'run id (default: GitHub run id or local-<timestamp>)')
+  .option('--retention-days <n>', 'prune this repo\'s runs older than this', (v) => Number(v), 30)
+  .action(async (o) => {
+    const r = await publishCommand({ cwd: process.cwd(), site: o.site, repo: o.repo, pr: o.pr, branch: o.branch, run: o.run, retentionDays: o.retentionDays, log: (l) => console.log(l) });
+    console.log(`\nPublished ${r.uploaded} files${r.pruned ? `, pruned ${r.pruned} old run(s)` : ''}.\n${r.url}`);
+    if (process.env.GITHUB_ENV) await (await import('node:fs/promises')).appendFile(process.env.GITHUB_ENV, `REPORT_URL=${r.url}\n`);
   });
 
 program.parseAsync().catch((err: unknown) => {

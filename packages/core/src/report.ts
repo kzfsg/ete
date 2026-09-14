@@ -76,7 +76,7 @@ function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
 
-type AssetUrl = (dir: string, rel: string) => string | undefined;
+export type AssetUrl = (dir: string, rel: string) => string | undefined;
 const relativeAsset: AssetUrl = (dir, rel) => `${esc(dir)}/${esc(rel)}`;
 
 function stepRow(dir: string, s: StepReport, asset: AssetUrl): string {
@@ -207,6 +207,11 @@ ${reports.map((r) => testSection(r, asset)).join('\n')}
 /** Report that references recordings as sibling files under the results root. */
 export function renderHtml(reports: Report[], title?: string): string {
   return page(reports, relativeAsset, title);
+}
+
+/** Report with assets resolved by the caller (e.g. blob URLs on the central site). */
+export function renderHtmlWith(reports: Report[], asset: AssetUrl, title?: string): string {
+  return page(reports, asset, title);
 }
 
 const MIME: Record<string, string> = { '.png': 'image/png', '.webm': 'video/webm', '.mp4': 'video/mp4', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif' };

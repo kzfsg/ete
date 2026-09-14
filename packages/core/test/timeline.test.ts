@@ -54,3 +54,13 @@ describe('timeline html', () => {
     expect(html).toContain('id="pay"');
   });
 });
+
+describe('renderHtmlWith', () => {
+  it('resolves assets through the given resolver', async () => {
+    const { renderHtmlWith } = await import('../src/report.js');
+    const html = renderHtmlWith([report], (dir, rel) => `https://blob.example/${dir}/${rel}`, 'Run 42');
+    expect(html).toContain('src="https://blob.example/pay/video.webm"');
+    expect(html).toContain('src="https://blob.example/pay/steps/01.png"');
+    expect(html).toContain('Run 42');
+  });
+});

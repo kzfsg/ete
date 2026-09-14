@@ -11,11 +11,10 @@ async function results(): Promise<{ root: string; report: Report }> {
   const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
   await writeFile(join(root, 'login', 'steps', '01.png'), png);
   await writeFile(join(root, 'login', 'filmstrip.png'), png);
-  await writeFile(join(root, 'login', 'preview.png'), png);
   await writeFile(join(root, 'login', 'video.webm'), Buffer.from('1a45dfa3', 'hex'));
   const report: Report = {
     name: 'Login', file: 'e2e/login.yaml', flow: 'Auth', mode: 'replay', status: 'passed', durationMs: 900, anomalyCount: 0,
-    recording: { videoPath: 'video.webm', tracePath: 'trace.zip', filmstripPath: 'filmstrip.png', previewPath: 'preview.png' },
+    recording: { videoPath: 'video.webm', tracePath: 'trace.zip', filmstripPath: 'filmstrip.png' },
     steps: [{ index: 1, text: 'go to /login', kind: 'action', status: 'passed', durationMs: 300, screenshot: 'steps/01.png', startMs: 0, endMs: 300, anomalies: [] }],
   };
   await writeFile(join(root, 'login', 'report.json'), JSON.stringify(report));

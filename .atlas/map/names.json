@@ -14,7 +14,10 @@
 		"folder:packages/cli": "CLI Tests",
 		"ete:src ete:test": "CLI Tests",
 		"ete:src ete:src/commands ete:test": "CLI Tests",
-		"ete:src ete:src/commands ete:src/session ete:test": "CLI Tests"
+		"ete:src ete:src/commands ete:src/session ete:test": "CLI Tests",
+		"@ete/site:lib @ete/site:test": "Site Store",
+		"folder:packages/site": "Site Store",
+		"@ete/site:app @ete/site:app/[owner]/[repo] @ete/site:app/[owner]/[repo]/[ref] @ete/site:app/[owner]/[repo]/[ref]/[run] @ete/site:lib @ete/site:test": "Site Store"
 	},
 	"prose": {
 		"ete-monorepo:": {
@@ -38,8 +41,8 @@
 		"folder:packages/core": {
 			"name": "Core Tests",
 			"kind": "library",
-			"summary": "A shared domain library for test plans, recorded steps, observations, and reports. It also contains parsing, caching, and timeline related helpers used by the rest of the repo.\n\nDefines TargetSchema, Step, RawTestFile, parseTestFile, Observation, Anomaly, StepReport, Report, emptyResolved, hashStep, and loadResolved.\n\nPure library with no runtime of its own.\n\nUsed by the CLI and browser driver packages, and exercised by core tests.",
-			"role": "Defines shared test run models and helpers."
+			"summary": "A shared domain layer for parsing tests and recording execution. It is the typed backbone that other packages use to talk about steps, observations, reports, and manifests.\n\nDefines schemas, parsed test files, resolved actions and assertions, recordings, anomalies, telemetry, reports, and step hashing.\n\npure library with no runtime of its own.\n\nUsed by the CLI, browser driver, and site code. The core tests build on it directly.",
+			"role": "Stores shared test run and report models."
 		},
 		"ete-monorepo:fixtures": {
 			"name": "Demo Fixture Server",
@@ -56,20 +59,20 @@
 		"@ete/core:src @ete/core:test": {
 			"name": "Core Tests",
 			"kind": "library",
-			"summary": "A shared domain library for test plans, recorded steps, observations, and reports. It also contains parsing, caching, and timeline related helpers used by the rest of the repo.\n\nDefines TargetSchema, Step, RawTestFile, parseTestFile, Observation, Anomaly, StepReport, Report, emptyResolved, hashStep, and loadResolved.\n\nPure library with no runtime of its own.\n\nUsed by the CLI and browser driver packages, and exercised by core tests.",
-			"role": "Defines shared test run models and helpers."
+			"summary": "A shared domain layer for parsing tests and recording execution. It is the typed backbone that other packages use to talk about steps, observations, reports, and manifests.\n\nDefines schemas, parsed test files, resolved actions and assertions, recordings, anomalies, telemetry, reports, and step hashing.\n\npure library with no runtime of its own.\n\nUsed by the CLI, browser driver, and site code. The core tests build on it directly.",
+			"role": "Stores shared test run and report models."
 		},
 		"@ete/driver-browser:src @ete/driver-browser:test": {
 			"name": "Browser Automation Driver",
 			"kind": "library",
-			"summary": "A browser automation driver package with telemetry and filmstrip support. It wraps browser interaction primitives and exposes sampled screenshot frames for reporting.\n\nDefines BrowserDriver, BrowserDriver.start, beginStep, observe, locate, act, check, screenshot, stop, and sampleFrames.\n\nLibrary code used at runtime by callers.\n\nBuilds on the core library and is used by the CLI session and command layers, plus browser tests.",
-			"role": "Handles browser automation and frame sampling."
+			"summary": "A browser automation adapter. It wraps step lifecycle callbacks, browser actions, screenshots, and filmstrip generation behind one driver API.\n\nImplements BrowserDriver, locator helpers, step begin and end hooks, note and observe calls, screenshot capture, and filmstrip assembly.\n\npure library with no runtime of its own.\n\nBuilds on the core models and is used by the CLI session and command code. Its own tests also exercise it.",
+			"role": "Controls browser execution and captures evidence."
 		},
 		"folder:packages/driver-browser": {
 			"name": "Browser Automation Driver",
 			"kind": "library",
-			"summary": "A browser automation driver package with telemetry and filmstrip support. It wraps browser interaction primitives and exposes sampled screenshot frames for reporting.\n\nDefines BrowserDriver, BrowserDriver.start, beginStep, observe, locate, act, check, screenshot, stop, and sampleFrames.\n\nLibrary code used at runtime by callers.\n\nBuilds on the core library and is used by the CLI session and command layers, plus browser tests.",
-			"role": "Handles browser automation and frame sampling."
+			"summary": "A browser automation adapter. It wraps step lifecycle callbacks, browser actions, screenshots, and filmstrip generation behind one driver API.\n\nImplements BrowserDriver, locator helpers, step begin and end hooks, note and observe calls, screenshot capture, and filmstrip assembly.\n\npure library with no runtime of its own.\n\nBuilds on the core models and is used by the CLI session and command code. Its own tests also exercise it.",
+			"role": "Controls browser execution and captures evidence."
 		},
 		"ete:": {
 			"name": "CLI Tests",
@@ -79,9 +82,9 @@
 		},
 		"folder:packages/cli": {
 			"name": "CLI Tests",
-			"kind": "gateway",
-			"summary": "A command line entrypoint and configuration layer. It contains the program bootstrap plus helpers for reading config and starting the app.\n\nDefines program, session, cwd, out, AppHandle, waitForUrl, startApp, ConfigSchema, Config, parseConfig, and loadConfig.\n\nRuns as the command line entrypoint.\n\nCalls the CLI commands layer, and the CLI tests drive it.",
-			"role": "Handles command startup and config resolution."
+			"kind": "library",
+			"summary": "A command line package that exposes the executable, subcommands, and session helpers. It is the user facing wrapper around the core model and browser driver.\n\nProvides the program entrypoint, config loading, run and report commands, and the session server client and server helpers.\n\nprocess entrypoint and helper library.\n\nBuilds on the core models and browser driver. Tests and session code call into it, and it calls the browser driver and core types.",
+			"role": "Handles command line entry, commands, and local session control."
 		},
 		"ete:src ete:test": {
 			"name": "CLI Tests",
@@ -97,9 +100,27 @@
 		},
 		"ete:src ete:src/commands ete:src/session ete:test": {
 			"name": "CLI Tests",
-			"kind": "gateway",
-			"summary": "A command line entrypoint and configuration layer. It contains the program bootstrap plus helpers for reading config and starting the app.\n\nDefines program, session, cwd, out, AppHandle, waitForUrl, startApp, ConfigSchema, Config, parseConfig, and loadConfig.\n\nRuns as the command line entrypoint.\n\nCalls the CLI commands layer, and the CLI tests drive it.",
-			"role": "Handles command startup and config resolution."
+			"kind": "library",
+			"summary": "A command line package that exposes the executable, subcommands, and session helpers. It is the user facing wrapper around the core model and browser driver.\n\nProvides the program entrypoint, config loading, run and report commands, and the session server client and server helpers.\n\nprocess entrypoint and helper library.\n\nBuilds on the core models and browser driver. Tests and session code call into it, and it calls the browser driver and core types.",
+			"role": "Handles command line entry, commands, and local session control."
+		},
+		"@ete/site:lib @ete/site:test": {
+			"name": "Site Store",
+			"kind": "library",
+			"summary": "A small data access layer for listing stored runs and refs. It turns repository folders into summaries that a site can render.\n\nDefines listFolders, listRuns, runPrefixOf, refLabel, and related helpers in packages/site/lib/store.ts.\n\npure library with no runtime of its own.\n\nBuilds on core run summary types and is tested by the site store suite.",
+			"role": "Handles listing stored runs and refs."
+		},
+		"folder:packages/site": {
+			"name": "Site Store",
+			"kind": "ui",
+			"summary": "A server rendered site layer with dynamic routes and shared HTML helpers. It reads stored run data and turns it into listing and detail pages.\n\nProvides the root layout, repository and ref routes, run detail pages, storage listing helpers, HTML rendering helpers, and blob access helpers.\n\nserver routes called per request.\n\nBuilds on the core models and the site library helpers. The site tests verify the storage helpers, and the route handlers use them to render pages.",
+			"role": "Serves repository and run pages."
+		},
+		"@ete/site:app @ete/site:app/[owner]/[repo] @ete/site:app/[owner]/[repo]/[ref] @ete/site:app/[owner]/[repo]/[ref]/[run] @ete/site:lib @ete/site:test": {
+			"name": "Site Store",
+			"kind": "ui",
+			"summary": "A server rendered site layer with dynamic routes and shared HTML helpers. It reads stored run data and turns it into listing and detail pages.\n\nProvides the root layout, repository and ref routes, run detail pages, storage listing helpers, HTML rendering helpers, and blob access helpers.\n\nserver routes called per request.\n\nBuilds on the core models and the site library helpers. The site tests verify the storage helpers, and the route handlers use them to render pages.",
+			"role": "Serves repository and run pages."
 		}
 	}
 }

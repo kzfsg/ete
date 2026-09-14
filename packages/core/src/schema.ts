@@ -50,7 +50,7 @@ export function parseTestFile(yamlText: string): TestFile {
 }
 
 export type Observation = { screenshotPng: Buffer; a11yTree?: string; url?: string };
-export type Recording = { videoPath?: string; tracePath?: string; filmstripPath?: string; previewPath?: string };
+export type Recording = { videoPath?: string; tracePath?: string; filmstripPath?: string };
 
 export type AnomalyKind = 'console-error' | 'page-error' | 'request-failed' | 'http-error' | 'dialog';
 export type Anomaly = {
@@ -85,4 +85,30 @@ export type Report = {
   durationMs: number;
   steps: StepReport[];
   recording: Recording;
+};
+
+/** Written next to a published run so listing pages need no per-test fetches. */
+export type RunManifest = {
+  version: 1;
+  owner: string;
+  repo: string;
+  ref: { kind: 'pr'; number: number } | { kind: 'branch'; name: string };
+  runId: string;
+  attempt?: string;
+  commit?: string;
+  branch?: string;
+  publishedAt: string;
+  source: 'ci' | 'local';
+  totals: { tests: number; passed: number; anomalies: number };
+  tests: Array<{
+    dir: string;
+    name: string;
+    flow: string;
+    status: 'passed' | 'failed';
+    durationMs: number;
+    anomalyCount: number;
+    steps: number;
+    failedStep?: { index: number; text: string; error?: string; screenshot?: string };
+    blobs: { report: string; video?: string; trace?: string; filmstrip?: string; screenshots: Record<string, string> };
+  }>;
 };
