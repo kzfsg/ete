@@ -159,13 +159,13 @@ export class BrowserDriver implements Driver {
         return;
       case 'click': {
         const loc = this.locate(action.target);
-        if (loc) await this.withForceFallback(loc, (force) => loc.click({ timeout: this.actionTimeout, force }));
+        if (loc) await this.withForceFallback(loc, (force, timeout) => loc.click({ timeout, force }));
         else if ('point' in action.target) await page.mouse.click(action.target.point.x, action.target.point.y);
         return;
       }
       case 'type': {
         const loc = this.locate(action.target);
-        if (loc) await this.withForceFallback(loc, (force) => loc.fill(action.text, { timeout: this.actionTimeout, force }));
+        if (loc) await this.withForceFallback(loc, (force, timeout) => loc.fill(action.text, { timeout, force }));
         else if ('point' in action.target) {
           await page.mouse.click(action.target.point.x, action.target.point.y);
           await page.keyboard.type(action.text);
@@ -192,15 +192,18 @@ export class BrowserDriver implements Driver {
    * Playwright's "stable" actionability check on slow machines. If the element exists and is
    * visible but the normal attempt times out, retry once bypassing the stability wait.
    */
-  private async withForceFallback(loc: Locator, attempt: (force: boolean) => Promise<void>): Promise<void> {
+  private async withForceFallback(loc: Locator, attempt: (force: boolean, timeout: number) => Promise<void>): Promise<void> {
+    // Give the normal attempt a slice of the budget; a perpetually moving element would otherwise
+    // burn the whole timeout on every step before the fallback kicks in.
+    const firstTry = Math.max(2000, Math.round(this.actionTimeout * 0.4));
     try {
-      await attempt(false);
+      await attempt(false, firstTry);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const timedOut = /Timeout \d+ms exceeded/.test(msg);
       if (!timedOut || !(await loc.isVisible().catch(() => false))) throw err;
       await loc.scrollIntoViewIfNeeded({ timeout: this.actionTimeout }).catch(() => {});
-      await attempt(true);
+      await attempt(true, this.actionTimeout);
     }
   }
 
