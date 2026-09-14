@@ -2,8 +2,8 @@ import { spawn } from 'node:child_process';
 import { mkdir, open, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ResolvedAction, ResolvedAssertion, StepReport, Target } from '@ete/core';
-import { call, readServerInfo } from '../session/client.js';
-import { SESSION_DIR, startSessionServer, type Observation } from '../session/server.js';
+import { call, listSessions, readServerInfo } from '../session/client.js';
+import { DEFAULT_SESSION_ID, sessionDirFor, startSessionServer, type Observation } from '../session/server.js';
 
 // ---- argv parsing ----------------------------------------------------------
 
@@ -83,15 +83,18 @@ function formatResult(r: { ok: boolean; recorded: boolean; error?: string; step?
 
 // ---- commands --------------------------------------------------------------
 
-export type StartOptions = { cwd: string; name?: string; flow?: string; out?: string; from?: string; at?: number; config?: string; url?: string; headed?: boolean; bin: string };
+export type StartOptions = { cwd: string; id?: string; port?: number; name?: string; flow?: string; out?: string; from?: string; at?: number; config?: string; url?: string; headed?: boolean; bin: string };
 
 /** Spawns the detached daemon and waits until it is ready. Returns the first observation. */
 export async function sessionStart(o: StartOptions): Promise<string> {
-  if (await readServerInfo(o.cwd)) throw new Error('A session is already active. Finish it with `ete session save` or `ete session abort`.');
-  const dir = join(o.cwd, SESSION_DIR);
+  const id = o.id ?? DEFAULT_SESSION_ID;
+  if (!/^[a-z0-9][a-z0-9._-]*$/i.test(id)) throw new Error(`Invalid session id "${id}": use letters, digits, dots, dashes, underscores.`);
+  if ((await listSessions(o.cwd)).some((s) => s.id === id)) throw new Error(`Session "${id}" is already active. Finish it with \`ete session save --id ${id}\` or \`ete session abort --id ${id}\`.`);
+  const dir = sessionDirFor(o.cwd, id);
   await mkdir(dir, { recursive: true });
   const logFile = await open(join(dir, 'daemon.log'), 'w');
-  const args = [o.bin, 'session', 'serve'];
+  const args = [o.bin, 'session', 'serve', '--id', id];
+  if (o.port !== undefined) args.push('--port', String(o.port));
   if (o.name) args.push('--name', o.name);
   if (o.flow) args.push('--flow', o.flow);
   if (o.out) args.push('--out', o.out);
@@ -110,10 +113,10 @@ export async function sessionStart(o: StartOptions): Promise<string> {
       const log = await readFile(join(dir, 'daemon.log'), 'utf8').catch(() => '');
       throw new Error(`Session failed to start:\n${log.trim() || `daemon exited with code ${child.exitCode}`}`);
     }
-    const info = await readServerInfo(o.cwd);
+    const info = await readServerInfo(o.cwd, id);
     if (info) {
-      const st = await call<{ name: string; flow: string; testPath: string; steps: StepReport[]; observation: Observation }>(o.cwd, '/status');
-      const head = [`Session started: "${st.name}" (${st.flow}) → ${st.testPath}`];
+      const st = await call<{ name: string; flow: string; testPath: string; steps: StepReport[]; observation: Observation }>(o.cwd, '/status', undefined, id);
+      const head = [`Session started: "${st.name}" (${st.flow}) → ${st.testPath}${id !== DEFAULT_SESSION_ID ? `  [--id ${id}]` : ''}`];
       if (st.steps.length) head.push(`Replayed ${st.steps.length} step(s):`, formatSteps(st.steps));
       return [...head, '', formatObservation(st.observation)].join('\n');
     }
@@ -129,7 +132,7 @@ export async function sessionServe(o: Omit<StartOptions, 'bin'>): Promise<void> 
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
   // Poll for shutdown: the server removes server.json when saved/aborted.
-  const dir = join(o.cwd, SESSION_DIR);
+  const dir = sessionDirFor(o.cwd, o.id ?? DEFAULT_SESSION_ID);
   const tick = async () => {
     try {
       await readFile(join(dir, 'server.json'));
@@ -141,42 +144,48 @@ export async function sessionServe(o: Omit<StartOptions, 'bin'>): Promise<void> 
   setTimeout(tick, 1000);
 }
 
-export async function sessionAct(cwd: string, argv: string[], as?: string): Promise<{ ok: boolean; text: string }> {
+export async function sessionAct(cwd: string, argv: string[], as?: string, id?: string): Promise<{ ok: boolean; text: string }> {
   const entry = parseAct(argv);
-  const r = await call<{ result: Parameters<typeof formatResult>[0]; observation: Observation }>(cwd, '/act', { entry, as });
+  const r = await call<{ result: Parameters<typeof formatResult>[0]; observation: Observation }>(cwd, '/act', { entry, as }, id);
   return { ok: r.result.ok, text: `${formatResult(r.result)}\n\n${formatObservation(r.observation)}` };
 }
 
-export async function sessionExpect(cwd: string, argv: string[], as?: string, record?: boolean): Promise<{ ok: boolean; text: string }> {
+export async function sessionExpect(cwd: string, argv: string[], as?: string, record?: boolean, id?: string): Promise<{ ok: boolean; text: string }> {
   const assertion = parseExpect(argv);
-  const r = await call<{ result: Parameters<typeof formatResult>[0]; observation: Observation }>(cwd, '/expect', { assertion, as, record });
+  const r = await call<{ result: Parameters<typeof formatResult>[0]; observation: Observation }>(cwd, '/expect', { assertion, as, record }, id);
   return { ok: r.result.ok, text: `${formatResult(r.result)}\n\n${formatObservation(r.observation)}` };
 }
 
-export async function sessionObserve(cwd: string): Promise<string> {
-  const r = await call<{ observation: Observation }>(cwd, '/observe');
+export async function sessionObserve(cwd: string, id?: string): Promise<string> {
+  const r = await call<{ observation: Observation }>(cwd, '/observe', undefined, id);
   return formatObservation(r.observation);
 }
 
-export async function sessionStatus(cwd: string): Promise<string> {
-  const st = await call<{ name: string; flow: string; testPath: string; steps: StepReport[]; observation: Observation }>(cwd, '/status');
-  return [`Session: "${st.name}" (${st.flow}) → ${st.testPath}`, formatSteps(st.steps), '', formatObservation(st.observation)].join('\n');
+export async function sessionStatus(cwd: string, id?: string): Promise<string> {
+  const st = await call<{ id: string; name: string; flow: string; testPath: string; steps: StepReport[]; observation: Observation }>(cwd, '/status', undefined, id);
+  return [`Session${st.id !== DEFAULT_SESSION_ID ? ` [${st.id}]` : ''}: "${st.name}" (${st.flow}) → ${st.testPath}`, formatSteps(st.steps), '', formatObservation(st.observation)].join('\n');
 }
 
-export async function sessionUndo(cwd: string): Promise<string> {
-  const r = await call<{ dropped?: StepReport; steps: StepReport[] }>(cwd, '/undo');
+export async function sessionUndo(cwd: string, id?: string): Promise<string> {
+  const r = await call<{ dropped?: StepReport; steps: StepReport[] }>(cwd, '/undo', undefined, id);
   return r.dropped ? `Dropped step ${r.dropped.index}: ${r.dropped.text} (browser state unchanged)\n${formatSteps(r.steps)}` : 'Nothing to undo.';
 }
 
-export async function sessionSave(cwd: string): Promise<string> {
-  const r = await call<{ testPath: string; resolvedPath: string; resultsDir: string; report: { status: string; steps: StepReport[]; anomalyCount: number } }>(cwd, '/save');
+export async function sessionSave(cwd: string, id?: string): Promise<string> {
+  const r = await call<{ testPath: string; resolvedPath: string; resultsDir: string; report: { status: string; steps: StepReport[]; anomalyCount: number } }>(cwd, '/save', undefined, id);
   return [
     `Saved ${r.testPath} and ${r.resolvedPath} (${r.report.steps.length} steps, ${r.report.status}${r.report.anomalyCount ? `, ${r.report.anomalyCount} anomalies` : ''}).`,
     `Recording in ${r.resultsDir}/. Verify the replay with: ete run ${r.testPath}`,
   ].join('\n');
 }
 
-export async function sessionAbort(cwd: string): Promise<string> {
-  await call(cwd, '/abort');
+export async function sessionAbort(cwd: string, id?: string): Promise<string> {
+  await call(cwd, '/abort', undefined, id);
   return 'Session aborted; nothing was saved.';
+}
+
+export async function sessionList(cwd: string): Promise<string> {
+  const all = await listSessions(cwd);
+  if (!all.length) return 'No active sessions.';
+  return all.map((s) => `${s.id}  "${s.name ?? ''}" → ${s.testPath ?? ''}  (pid ${s.pid})`).join('\n');
 }

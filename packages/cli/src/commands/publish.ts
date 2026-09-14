@@ -106,17 +106,34 @@ export async function publishRun(o: PublishOptions): Promise<PublishResult> {
     log(`  ↑ ${r.name} (${urls.size} files)`);
   }
 
+  // Sharded CI jobs publish to the same run id: merge with whatever is already there.
+  const existing = await readManifest(o.blob, `${prefix}manifest.json`);
+  const merged = new Map<string, RunManifest['tests'][number]>();
+  for (const t of existing?.tests ?? []) merged.set(t.dir, t);
+  for (const t of tests) merged.set(t.dir, t);
+  const allTests = [...merged.values()].sort((a, b) => a.flow.localeCompare(b.flow) || a.name.localeCompare(b.name));
   const manifest: RunManifest = {
-    version: 1, owner: o.owner, repo: o.repo, ref: o.ref, runId: o.runId, attempt: o.attempt, commit: o.commit, branch: o.branch,
+    version: 1, owner: o.owner, repo: o.repo, ref: o.ref, runId: o.runId, attempt: o.attempt ?? existing?.attempt, commit: o.commit ?? existing?.commit, branch: o.branch ?? existing?.branch,
     publishedAt: now.toISOString(), source: o.source,
-    totals: { tests: reports.length, passed: reports.filter((r) => r.status === 'passed').length, anomalies: reports.reduce((n, r) => n + r.anomalyCount, 0) },
-    tests,
+    totals: { tests: allTests.length, passed: allTests.filter((t) => t.status === 'passed').length, anomalies: allTests.reduce((n, t) => n + t.anomalyCount, 0) },
+    tests: allTests,
   };
   await o.blob.put(`${prefix}manifest.json`, JSON.stringify(manifest, null, 2), { contentType: 'application/json' });
   uploaded++;
 
   const pruned = await prune(o.blob, `runs/${slug(o.owner)}/${slug(o.repo)}/`, (o.retentionDays ?? 30) * 86_400_000, now, log);
   return { url: runUrl(o.siteUrl, o), prefix, manifest, uploaded, pruned };
+}
+
+async function readManifest(blob: BlobClient, pathname: string): Promise<RunManifest | undefined> {
+  const page = await blob.list({ prefix: pathname, limit: 1 });
+  const hit = page.blobs.find((b) => b.pathname === pathname);
+  if (!hit) return undefined;
+  try {
+    return (await blob.getJson(hit.url)) as RunManifest;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Deletes runs under `repoPrefix` whose manifest is older than `maxAgeMs`. */

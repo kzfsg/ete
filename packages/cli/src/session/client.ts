@@ -1,8 +1,8 @@
-import { readFile, rm } from 'node:fs/promises';
+import { readdir, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { SESSION_DIR } from './server.js';
+import { SESSION_ROOT, sessionDirFor } from './server.js';
 
-export type ServerInfo = { port: number; token: string; pid: number; name?: string; testPath?: string };
+export type ServerInfo = { id: string; port: number; token: string; pid: number; name?: string; testPath?: string };
 
 export function isAlive(pid: number): boolean {
   try {
@@ -13,16 +13,15 @@ export function isAlive(pid: number): boolean {
   }
 }
 
-/** Returns the active session, cleaning up a stale file whose daemon is gone. */
-export async function readServerInfo(cwd: string): Promise<ServerInfo | undefined> {
-  const path = join(cwd, SESSION_DIR, 'server.json');
+async function readInfo(cwd: string, id: string): Promise<ServerInfo | undefined> {
+  const path = join(sessionDirFor(cwd, id), 'server.json');
   let raw: string;
   try {
     raw = await readFile(path, 'utf8');
   } catch {
     return undefined;
   }
-  const info = JSON.parse(raw) as ServerInfo;
+  const info = { id, ...(JSON.parse(raw) as Omit<ServerInfo, 'id'>) };
   if (!isAlive(info.pid)) {
     await rm(path, { force: true });
     return undefined;
@@ -30,9 +29,32 @@ export async function readServerInfo(cwd: string): Promise<ServerInfo | undefine
   return info;
 }
 
-export async function call<T = Record<string, unknown>>(cwd: string, path: string, body?: unknown): Promise<T> {
-  const info = await readServerInfo(cwd);
-  if (!info) throw new Error('No active session. Start one with `ete session start --name "<test name>"`.');
+/** All live sessions in this project (stale server.json files are cleaned up). */
+export async function listSessions(cwd: string): Promise<ServerInfo[]> {
+  let ids: string[] = [];
+  try {
+    ids = (await readdir(join(cwd, SESSION_ROOT), { withFileTypes: true })).filter((d) => d.isDirectory()).map((d) => d.name);
+  } catch {
+    return [];
+  }
+  const infos = await Promise.all(ids.sort().map((id) => readInfo(cwd, id)));
+  return infos.filter((i): i is ServerInfo => Boolean(i));
+}
+
+/**
+ * Resolves the session to talk to: the given id, or the only live session when none is given.
+ * With several live sessions and no id, refuses rather than guessing.
+ */
+export async function readServerInfo(cwd: string, id?: string): Promise<ServerInfo | undefined> {
+  if (id) return readInfo(cwd, id);
+  const all = await listSessions(cwd);
+  if (all.length > 1) throw new Error(`${all.length} sessions are active (${all.map((s) => s.id).join(', ')}); pass --id <session>.`);
+  return all[0];
+}
+
+export async function call<T = Record<string, unknown>>(cwd: string, path: string, body?: unknown, id?: string): Promise<T> {
+  const info = await readServerInfo(cwd, id);
+  if (!info) throw new Error(`No active session${id ? ` "${id}"` : ''}. Start one with \`ete session start --name "<test name>"\`.`);
   const res = await fetch(`http://127.0.0.1:${info.port}${path}`, {
     method: path === '/status' ? 'GET' : 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${info.token}` },

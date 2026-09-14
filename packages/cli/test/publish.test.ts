@@ -100,3 +100,18 @@ describe('publishRun', () => {
     expect(deleted.sort()).toEqual(['runs/acme/shop/pr-1/old/manifest.json', 'runs/acme/shop/pr-1/old/t/video.webm']);
   });
 });
+
+describe('publishRun with an existing manifest (sharded runs)', () => {
+  it('merges tests into the existing manifest for the same run id instead of replacing it', async () => {
+    const cwd = await results();
+    const { client, store } = fakeBlob({
+      'runs/acme/shop/pr-5/42/manifest.json': JSON.stringify({ version: 1, owner: 'acme', repo: 'shop', ref: { kind: 'pr', number: 5 }, runId: '42', publishedAt: '2026-09-14T21:00:00.000Z', source: 'ci',
+        totals: { tests: 1, passed: 1, anomalies: 0 }, tests: [{ dir: 'checkout', name: 'Checkout', flow: 'Shop', status: 'passed', durationMs: 5, anomalyCount: 0, steps: 3, blobs: { report: 'https://blob.test/r', screenshots: {} } }] }),
+    });
+    const out = await publishRun({ cwd, blob: client, owner: 'acme', repo: 'shop', ref: { kind: 'pr', number: 5 }, runId: '42', source: 'ci', siteUrl: 'https://s', now: new Date('2026-09-14T22:00:00Z') });
+    const manifest = JSON.parse(store.get('runs/acme/shop/pr-5/42/manifest.json')!.toString());
+    expect(manifest.tests.map((t: { dir: string }) => t.dir).sort()).toEqual(['checkout', 'sign-in']);
+    expect(manifest.totals).toEqual({ tests: 2, passed: 1, anomalies: 1 });
+    expect(out.manifest.tests.length).toBe(2);
+  });
+});

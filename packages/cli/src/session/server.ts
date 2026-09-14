@@ -27,10 +27,16 @@ import { startApp, type AppHandle } from '../app.js';
 import { loadConfig } from '../config.js';
 import { RESULTS_DIR, driverOptions, writeFilmstrip } from '../commands/run.js';
 
-export const SESSION_DIR = join(RESULTS_DIR, '.session');
+export const SESSION_ROOT = join(RESULTS_DIR, '.session');
+export const DEFAULT_SESSION_ID = 'default';
+export const sessionDirFor = (cwd: string, id: string) => join(cwd, SESSION_ROOT, id);
 
 export type SessionServerOptions = {
   cwd: string;
+  /** Session id; several sessions can run side by side in one project. */
+  id?: string;
+  /** Start the app on this port for this session ({port} in start/url is substituted). */
+  port?: number;
   name?: string;
   flow?: string;
   out?: string;
@@ -105,15 +111,16 @@ export async function startSessionServer(o: SessionServerOptions): Promise<Sessi
     testPath = o.out ?? (flow ? join('e2e', slugify(flow), `${slugify(name)}.yaml`) : join('e2e', `${slugify(name)}.yaml`));
   }
 
-  const sessionDir = join(o.cwd, SESSION_DIR);
+  const id = o.id ?? DEFAULT_SESSION_ID;
+  const sessionDir = sessionDirFor(o.cwd, id);
   await mkdir(sessionDir, { recursive: true });
   const resultsDir = join(sessionDir, 'recording');
   // Only clear our own artefacts; the client owns daemon.log.
   await Promise.all([rm(resultsDir, { recursive: true, force: true }), rm(join(sessionDir, 'server.json'), { force: true }), rm(join(sessionDir, 'observe.png'), { force: true })]);
 
-  const app: AppHandle = await startApp({ start: cfg.start, url: baseUrl, readyTimeout: cfg.readyTimeout, log });
+  const app: AppHandle = await startApp({ start: cfg.start, url: baseUrl, readyTimeout: cfg.readyTimeout, port: o.port, log });
   const driver = (o.createDriver ?? (() => createBrowserDriver(driverOptions(cfg))))();
-  const recorder = new Recorder({ driver, name, flow, testPath, baseUrl, resultsDir, headed: o.headed, prefix, log });
+  const recorder = new Recorder({ driver, name, flow, testPath, baseUrl: app.url, resultsDir, headed: o.headed, prefix, log });
   try {
     await recorder.start();
     // A new session opens the app at "/" and records that as step 1 so the saved test is self-contained.
@@ -172,7 +179,7 @@ export async function startSessionServer(o: SessionServerOptions): Promise<Sessi
       if (req.headers.authorization !== `Bearer ${token}`) return send(res, 401, { error: 'unauthorized' });
       const path = new URL(req.url ?? '/', 'http://x').pathname;
       if (req.method === 'GET' && path === '/status') {
-        return send(res, 200, { name, flow: flowFor(testPath, flow), testPath, steps: recorder.steps(), observation: await observe() });
+        return send(res, 200, { id, name, flow: flowFor(testPath, flow), testPath, steps: recorder.steps(), observation: await observe() });
       }
       if (req.method !== 'POST') return send(res, 405, { error: 'method not allowed' });
       const body = await readJson(req);
@@ -208,7 +215,7 @@ export async function startSessionServer(o: SessionServerOptions): Promise<Sessi
   });
   await new Promise<void>((r) => http.listen(0, '127.0.0.1', r));
   const port = (http.address() as AddressInfo).port;
-  await writeFile(join(sessionDir, 'server.json'), JSON.stringify({ port, token, pid: process.pid, name, testPath }));
+  await writeFile(join(sessionDir, 'server.json'), JSON.stringify({ id, port, token, pid: process.pid, name, testPath }));
 
   return {
     port,

@@ -55,3 +55,24 @@ describe('startApp', () => {
     await new Promise<void>((r) => s.close(() => r()));
   });
 });
+
+describe('startApp when the app is already up', () => {
+  it('does not spawn a second instance and stop() leaves the running app alone', async () => {
+    const s = createServer((_, res) => { res.writeHead(200); res.end('up'); });
+    await new Promise<void>((r) => s.listen(0, r));
+    const url = `http://localhost:${(s.address() as AddressInfo).port}/`;
+    const app = await startApp({ start: 'node -e "process.exit(7)"', url, readyTimeout: 2000 });
+    expect(app.owned).toBe(false);
+    await app.stop();
+    expect((await fetch(url)).status).toBe(200);
+    await new Promise<void>((r) => s.close(() => r()));
+  });
+  it('substitutes {port} in start and url when a port is given', async () => {
+    const port = await freePort();
+    const app = await startApp({ start: `node -e "require('http').createServer((q,s)=>{s.end('p'+process.env.PORT)}).listen(process.env.PORT)"`, url: 'http://localhost:{port}/', readyTimeout: 5000, port });
+    expect(app.url).toBe(`http://localhost:${port}/`);
+    expect(app.owned).toBe(true);
+    expect(await (await fetch(app.url)).text()).toBe(`p${port}`);
+    await app.stop();
+  });
+});

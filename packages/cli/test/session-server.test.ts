@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { mkdtemp, writeFile, readFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, mkdir, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
@@ -42,7 +42,7 @@ describe('session server', () => {
       const obs = await call(s, '/observe');
       expect(obs.json.observation.url).toBe(`${url}/`);
       expect(obs.json.observation.a11yTree).toContain('Log in');
-      expect(obs.json.observation.screenshot).toMatch(/\.session[\\/]observe\.png$/);
+      expect(obs.json.observation.screenshot).toMatch(/\.session[\\/]default[\\/]observe\.png$/);
 
       const nav = await call(s, '/act', { entry: { kind: 'navigate', url: '/login.html' } });
       expect(nav.json.result).toMatchObject({ ok: true, recorded: true, step: { index: 2, text: 'go to /login.html' } });
@@ -130,4 +130,31 @@ describe('session server', () => {
     } }));
     await expect(startSessionServer({ cwd, from: 'e2e/x.yaml', at: 3 })).rejects.toThrow(/prefix step 2 "click nothing"/);
   }, 60_000);
+});
+
+describe('concurrent named sessions', () => {
+  it('two sessions in one project run side by side with separate state and save separate tests', async () => {
+    const cwd = await project();
+    const a = await startSessionServer({ cwd, id: 'alpha', name: 'Alpha flow', flow: 'A' });
+    const b = await startSessionServer({ cwd, id: 'beta', name: 'Beta flow', flow: 'B' });
+    try {
+      expect(a.port).not.toBe(b.port);
+      expect((await stat(join(cwd, 'ete-results/.session/alpha/server.json'))).isFile()).toBe(true);
+      expect((await stat(join(cwd, 'ete-results/.session/beta/server.json'))).isFile()).toBe(true);
+      await call(a, '/act', { entry: { kind: 'navigate', url: '/login.html' } });
+      const sa = (await call(a, '/status')).json;
+      const sb = (await call(b, '/status')).json;
+      expect(sa.steps.length).toBe(2);
+      expect(sb.steps.length).toBe(1);
+      expect(sb.observation.url).toBe(`${url}/`);
+      await call(a, '/save', {});
+      await call(b, '/save', {});
+    } finally {
+      await a.close();
+      await b.close();
+    }
+    expect((await stat(join(cwd, 'e2e/a/alpha-flow.yaml'))).isFile()).toBe(true);
+    expect((await stat(join(cwd, 'e2e/b/beta-flow.yaml'))).isFile()).toBe(true);
+    await expect(stat(join(cwd, 'ete-results/.session/alpha/server.json'))).rejects.toThrow();
+  }, 120_000);
 });

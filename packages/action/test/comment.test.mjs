@@ -60,3 +60,18 @@ test('without a hosted report it falls back to text and the artifact link', () =
 test('handles no reports', () => {
   assert.match(buildComment([], { artifactUrl: 'x' }), /No test results/);
 });
+
+test('large suites: failures first, passing flows collapsed, headline still complete', () => {
+  const many = [];
+  for (let i = 1; i <= 14; i++) many.push({ ...login, name: `Flow ${i} test`, file: `e2e/f${i}/t.yaml`, flow: `Flow ${String(i).padStart(2, '0')}` });
+  many.push(pay);
+  const md = buildComment(many, hosted);
+  assert.match(md, /\*\*14\/15 passed/);
+  assert.ok(md.indexOf('### Checkout — 0/1 passed') < md.indexOf('Flow 01'), 'failing flow comes first');
+  assert.match(md, /<details><summary>✅ 14 passing flows \(14 tests\)<\/summary>/);
+  assert.match(md, /Flow 14 test/);
+});
+
+test('small suites are not collapsed', () => {
+  assert.doesNotMatch(buildComment([login, wrongPw, pay], hosted), /passing flows/);
+});

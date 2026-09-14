@@ -4,7 +4,7 @@ import { runCommand } from './commands/run.js';
 import { reportCommand } from './commands/report.js';
 import { publishCommand } from './commands/publish.js';
 import { initCommand } from './commands/init.js';
-import { sessionAbort, sessionAct, sessionExpect, sessionObserve, sessionSave, sessionServe, sessionStart, sessionStatus, sessionUndo } from './commands/session.js';
+import { sessionAbort, sessionAct, sessionExpect, sessionList, sessionObserve, sessionSave, sessionServe, sessionStart, sessionStatus, sessionUndo } from './commands/session.js';
 import { fileURLToPath } from 'node:url';
 
 const program = new Command();
@@ -19,8 +19,11 @@ program
   .option('-c, --config <path>', 'path to ete.yaml', 'ete.yaml')
   .option('--url <url>', 'override the base URL from ete.yaml')
   .option('--start <command>', 'override the start command from ete.yaml')
+  .option('-w, --workers <n>', 'replay this many tests at once (tests must not share state)', (v) => Number(v), 1)
+  .option('--shard <i/n>', 'run only the i-th of n slices of the test list (for CI matrices)')
   .action(async (files: string[], o) => {
-    process.exitCode = await runCommand({ cwd: process.cwd(), files, ci: o.ci, headed: o.headed, config: o.config, url: o.url, start: o.start });
+    const shard = o.shard ? (() => { const m = /^(\d+)\/(\d+)$/.exec(o.shard); if (!m) throw new Error('--shard must look like 1/3'); return { index: Number(m[1]), total: Number(m[2]) }; })() : undefined;
+    process.exitCode = await runCommand({ cwd: process.cwd(), files, ci: o.ci, headed: o.headed, config: o.config, url: o.url, start: o.start, workers: o.workers, shard });
   });
 
 program
@@ -39,9 +42,11 @@ const session = program.command('session').description('Drive a recorded browser
 const cwd = () => process.cwd();
 const out = (text: string) => console.log(text);
 
-session
-  .command('start')
+const withId = (cmd: Command) => cmd.option('--id <session>', 'session id, when several sessions run side by side');
+
+withId(session.command('start'))
   .description('Start a session: a new test, or resume an existing one at a step')
+  .option('--port <n>', 'start the app on this port for this session ({port} in start/url is substituted)', (v) => Number(v))
   .option('--name <name>', 'name of the new test')
   .option('--flow <flow>', 'user flow the test belongs to')
   .option('-o, --out <path>', 'test file path (default: e2e/<flow>/<slug>.yaml)')
@@ -54,42 +59,41 @@ session
 
 session
   .command('serve', { hidden: true })
+  .option('--id <session>').option('--port <n>', '', (v) => Number(v))
   .option('--name <name>').option('--flow <flow>').option('-o, --out <path>').option('--from <test>').option('--at <n>', '', (v) => Number(v))
   .option('-c, --config <path>', '', 'ete.yaml').option('--url <url>').option('--headed', '', false)
   .action(async (o) => sessionServe({ cwd: cwd(), ...o }));
 
-session
-  .command('observe')
+withId(session.command('observe'))
   .description('Print the current URL, accessibility tree, and screenshot path')
-  .action(async () => out(await sessionObserve(cwd())));
+  .action(async (o) => out(await sessionObserve(cwd(), o.id)));
 
-session
-  .command('act')
+withId(session.command('act'))
   .description('Perform one action and record it if it succeeds: goto <url> | click <sel> | type <sel> <text> | press <key> | scroll <dy> [sel] | wait <ms>')
   .argument('<args...>')
   .option('--as <text>', 'natural-language step text to record instead of the default')
   .action(async (args: string[], o) => {
-    const r = await sessionAct(cwd(), args, o.as);
+    const r = await sessionAct(cwd(), args, o.as, o.id);
     out(r.text);
     if (!r.ok) process.exitCode = 1;
   });
 
-session
-  .command('expect')
+withId(session.command('expect'))
   .description('Check an assertion and record it if it holds: text <text> | visible <sel> | url <regex>')
   .argument('<args...>')
   .option('--as <text>', 'natural-language step text to record instead of the default')
   .option('--record', 'record the assertion even if it fails', false)
   .action(async (args: string[], o) => {
-    const r = await sessionExpect(cwd(), args, o.as, o.record);
+    const r = await sessionExpect(cwd(), args, o.as, o.record, o.id);
     out(r.text);
     if (!r.ok) process.exitCode = 1;
   });
 
-session.command('status').description('Show recorded steps and the current page').action(async () => out(await sessionStatus(cwd())));
-session.command('undo').description('Drop the last recorded step (browser state is not rewound)').action(async () => out(await sessionUndo(cwd())));
-session.command('save').description('Write the test + recorded actions, finish the recording, stop').action(async () => out(await sessionSave(cwd())));
-session.command('abort').description('Discard the session and stop').action(async () => out(await sessionAbort(cwd())));
+withId(session.command('status')).description('Show recorded steps and the current page').action(async (o) => out(await sessionStatus(cwd(), o.id)));
+withId(session.command('undo')).description('Drop the last recorded step (browser state is not rewound)').action(async (o) => out(await sessionUndo(cwd(), o.id)));
+withId(session.command('save')).description('Write the test + recorded actions, finish the recording, stop').action(async (o) => out(await sessionSave(cwd(), o.id)));
+withId(session.command('abort')).description('Discard the session and stop').action(async (o) => out(await sessionAbort(cwd(), o.id)));
+session.command('list').description('List active sessions in this project').action(async () => out(await sessionList(cwd())));
 
 program
   .command('report')

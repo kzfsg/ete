@@ -50,7 +50,7 @@ describe('ete session (daemon)', () => {
     const start = await ete('start', '--name', 'Home links to login', '--flow', 'Nav');
     expect(start.stdout).toMatch(/Session started/);
     expect(start.stdout).toMatch(/Log in/);   // observation printed
-    expect((await stat(join(cwd, 'ete-results/.session/server.json'))).isFile()).toBe(true);
+    expect((await stat(join(cwd, 'ete-results/.session/default/server.json'))).isFile()).toBe(true);
 
     await expect(ete('start', '--name', 'again')).rejects.toThrow(/already active/);
 
@@ -70,7 +70,7 @@ describe('ete session (daemon)', () => {
 
     const save = await ete('save');
     expect(save.stdout).toMatch(/Saved e2e\/nav\/home-links-to-login\.yaml/);
-    await expect(stat(join(cwd, 'ete-results/.session/server.json'))).rejects.toThrow();
+    await expect(stat(join(cwd, 'ete-results/.session/default/server.json'))).rejects.toThrow();
     expect(await readFile(join(cwd, 'e2e/nav/home-links-to-login.yaml'), 'utf8')).toContain('- click "Log in"');
 
     const run = await exec(process.execPath, [BIN, 'run'], { cwd });
@@ -86,9 +86,29 @@ describe('ete session (daemon)', () => {
     expect(abort.stdout).toMatch(/aborted/i);
     await expect(stat(join(cwd, 'e2e'))).rejects.toThrow();
     // stale file with a dead pid must not block a new session
-    await writeFile(join(cwd, 'ete-results/.session/server.json'), JSON.stringify({ port: 1, token: 'x', pid: 999999999 }));
+    await writeFile(join(cwd, 'ete-results/.session/default/server.json'), JSON.stringify({ port: 1, token: 'x', pid: 999999999 }));
     const again = await ete('start', '--name', 'Fresh');
     expect(again.stdout).toMatch(/Session started/);
     await ete('abort');
   }, 120_000);
+});
+
+describe('ete session --id', () => {
+  it('runs two named sessions at once and lists them', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ete-daemon-'));
+    await writeFile(join(cwd, 'ete.yaml'), `url: ${url}\n`);
+    const ete = (...args: string[]) => exec(process.execPath, [BIN, 'session', ...args], { cwd });
+    await ete('start', '--id', 'one', '--name', 'One');
+    await ete('start', '--id', 'two', '--name', 'Two');
+    const ls = await ete('list');
+    expect(ls.stdout).toMatch(/one .*One/);
+    expect(ls.stdout).toMatch(/two .*Two/);
+    await ete('act', '--id', 'two', 'click', 'role=link[name="Log in"]');
+    expect((await ete('status', '--id', 'one')).stdout).toMatch(/1\. go to \/\n/);
+    expect((await ete('status', '--id', 'two')).stdout).toMatch(/2\. click "Log in"/);
+    await expect(ete('status')).rejects.toThrow(/--id/);
+    await ete('abort', '--id', 'one');
+    await ete('abort', '--id', 'two');
+    expect((await ete('list')).stdout).toMatch(/No active sessions/);
+  }, 180_000);
 });

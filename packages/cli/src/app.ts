@@ -1,6 +1,21 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 
-export type AppHandle = { stop(): Promise<void> };
+export type AppHandle = {
+  stop(): Promise<void>;
+  /** The URL actually used (after {port} substitution). */
+  url: string;
+  /** True when this handle started the app and will stop it; false when it was already running. */
+  owned: boolean;
+};
+
+async function isUp(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(1500) });
+    return res.status < 500;
+  } catch {
+    return false;
+  }
+}
 
 export async function waitForUrl(url: string, timeoutMs: number, output?: () => string): Promise<void> {
   const deadline = Date.now() + timeoutMs;
@@ -22,13 +37,33 @@ export async function waitForUrl(url: string, timeoutMs: number, output?: () => 
   );
 }
 
-export async function startApp(opts: { start?: string; url: string; readyTimeout: number; log?: (line: string) => void }): Promise<AppHandle> {
-  if (!opts.start) {
-    await waitForUrl(opts.url, opts.readyTimeout);
-    return { stop: async () => {} };
+export type StartAppOptions = {
+  start?: string;
+  url: string;
+  readyTimeout: number;
+  /** When set, `{port}` in start/url is replaced and PORT is exported to the start command. */
+  port?: number;
+  log?: (line: string) => void;
+};
+
+export async function startApp(opts: StartAppOptions): Promise<AppHandle> {
+  const sub = (v: string) => (opts.port !== undefined ? v.replace(/\{port\}/g, String(opts.port)) : v);
+  const url = sub(opts.url);
+  const start = opts.start ? sub(opts.start) : undefined;
+  if (!start) {
+    await waitForUrl(url, opts.readyTimeout);
+    return { stop: async () => {}, url, owned: false };
+  }
+  // Another session or a dev server may already serve this URL: use it, and never stop it.
+  if (await isUp(url)) {
+    opts.log?.(`App already running at ${url}; not starting "${start}".`);
+    return { stop: async () => {}, url, owned: false };
   }
   const chunks: string[] = [];
-  const child: ChildProcess = spawn(opts.start, { shell: true, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
+  const child: ChildProcess = spawn(start, {
+    shell: true, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32',
+    env: opts.port !== undefined ? { ...process.env, PORT: String(opts.port) } : process.env,
+  });
   const collect = (buf: Buffer) => {
     chunks.push(buf.toString());
     if (chunks.length > 200) chunks.shift();
@@ -55,10 +90,10 @@ export async function startApp(opts: { start?: string; url: string; readyTimeout
     }
   };
   try {
-    await waitForUrl(opts.url, opts.readyTimeout, () => chunks.join('').slice(-4000));
+    await waitForUrl(url, opts.readyTimeout, () => chunks.join('').slice(-4000));
   } catch (err) {
     await stop();
     throw err;
   }
-  return { stop };
+  return { stop, url, owned: true };
 }

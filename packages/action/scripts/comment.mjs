@@ -35,10 +35,16 @@ export function buildComment(reports, o) {
     if (!flows.has(f)) flows.set(f, []);
     flows.get(f).push(r);
   }
-  for (const flow of [...flows.keys()].sort((a, b) => a.localeCompare(b))) {
+  const COLLAPSE_AT = 10;
+  const flowNames = [...flows.keys()].sort((a, b) => a.localeCompare(b));
+  const failingFlows = flowNames.filter((f) => flows.get(f).some((t) => t.status !== 'passed'));
+  const passingFlows = flowNames.filter((f) => !failingFlows.includes(f));
+  const collapse = reports.length > COLLAPSE_AT && passingFlows.length > 0;
+
+  const renderFlow = (flow) => {
     const tests = flows.get(flow).sort((a, b) => a.name.localeCompare(b.name));
     const ok = tests.filter((t) => t.status === 'passed').length;
-    lines.push('', `### ${flow} — ${ok}/${tests.length} passed`, '');
+    const out = ['', `### ${flow} — ${ok}/${tests.length} passed`, ''];
     for (const t of tests) {
       const dir = dirOf(t);
       const links = [];
@@ -47,15 +53,27 @@ export function buildComment(reports, o) {
         if (t.recording?.tracePath) links.push(`[trace](https://trace.playwright.dev/?trace=${o.reportUrl}/${dir}/${t.recording.tracePath})`);
       }
       const warn = t.anomalyCount ? ` · ⚠️ ${plural(t.anomalyCount, 'anomaly', 'anomalies')}` : '';
-      lines.push(`${t.status === 'passed' ? '✅' : '❌'} ${t.name} · ${secs(t.durationMs)}${warn}${links.length ? `  ${links.join(' · ')}` : ''}`);
+      out.push(`${t.status === 'passed' ? '✅' : '❌'} ${t.name} · ${secs(t.durationMs)}${warn}${links.length ? `  ${links.join(' · ')}` : ''}`);
       const failed = t.steps.find((s) => s.status === 'failed');
       if (failed) {
         const err = failed.error ? ` · ${failed.error.split('\n')[0]}` : '';
-        lines.push(`  - step ${failed.index}: ${failed.kind === 'expect' ? 'expect ' : ''}${failed.text}${err}`);
-        lines.push(`  - fix: \`ete session start --from ${t.file} --at ${failed.index}\``);
-        if (o.reportUrl && failed.screenshot) lines.push('', `  ![step ${failed.index}](${o.reportUrl}/${dir}/${failed.screenshot})`, '');
+        out.push(`  - step ${failed.index}: ${failed.kind === 'expect' ? 'expect ' : ''}${failed.text}${err}`);
+        out.push(`  - fix: \`ete session start --from ${t.file} --at ${failed.index}\``);
+        if (o.reportUrl && failed.screenshot) out.push('', `  ![step ${failed.index}](${o.reportUrl}/${dir}/${failed.screenshot})`, '');
       }
     }
+    return out;
+  };
+
+  // Failures first, always expanded. Passing flows are collapsed once the suite is large.
+  for (const flow of failingFlows) lines.push(...renderFlow(flow));
+  if (collapse) {
+    const n = passingFlows.reduce((k, f) => k + flows.get(f).length, 0);
+    lines.push('', `<details><summary>✅ ${plural(passingFlows.length, 'passing flow', 'passing flows')} (${plural(n, 'test', 'tests')})</summary>`);
+    for (const flow of passingFlows) lines.push(...renderFlow(flow));
+    lines.push('', '</details>');
+  } else {
+    for (const flow of passingFlows) lines.push(...renderFlow(flow));
   }
 
   const anomalyList = reports.flatMap((r) => r.steps.flatMap((s) => (s.anomalies ?? []).map((a) => ({ test: r, step: s, a }))));
