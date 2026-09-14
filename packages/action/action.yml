@@ -32,6 +32,18 @@ inputs:
     description: 'Node version to use'
     required: false
     default: '20'
+  media-branch:
+    description: 'Branch to publish recordings to so the PR comment can embed filmstrips and link traces. Empty disables publishing. Needs contents: write.'
+    required: false
+    default: 'ete-media'
+  media-retention-days:
+    description: 'Prune published runs older than this many days'
+    required: false
+    default: '30'
+  pages-url:
+    description: 'Base URL where the media branch is served (GitHub Pages). Enables direct timeline links in the comment.'
+    required: false
+    default: ''
 
 outputs:
   outcome:
@@ -84,6 +96,24 @@ runs:
         if-no-files-found: ignore
         retention-days: 14
 
+    - name: Render timeline
+      if: always()
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: node "$ETE_BIN" report --no-open || true
+
+    - name: Publish recordings to media branch
+      id: publish
+      if: always() && inputs.media-branch != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        MEDIA_BRANCH: ${{ inputs.media-branch }}
+        MEDIA_RETENTION_DAYS: ${{ inputs.media-retention-days }}
+        PAGES_URL: ${{ inputs.pages-url }}
+      run: node "${{ github.action_path }}/scripts/publish.mjs"
+
     - name: Comment on PR
       if: always() && inputs.comment == 'true' && github.event_name == 'pull_request'
       shell: bash
@@ -92,6 +122,7 @@ runs:
         GITHUB_TOKEN: ${{ github.token }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
         ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        # MEDIA_BASE / TIMELINE_URL are exported by publish.mjs via GITHUB_ENV
       run: node "${{ github.action_path }}/scripts/comment.mjs"
 
     - name: Fail if tests failed
