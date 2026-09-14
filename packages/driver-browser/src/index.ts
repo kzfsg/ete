@@ -159,13 +159,13 @@ export class BrowserDriver implements Driver {
         return;
       case 'click': {
         const loc = this.locate(action.target);
-        if (loc) await loc.click({ timeout: this.actionTimeout });
+        if (loc) await this.withForceFallback(loc, (force) => loc.click({ timeout: this.actionTimeout, force }));
         else if ('point' in action.target) await page.mouse.click(action.target.point.x, action.target.point.y);
         return;
       }
       case 'type': {
         const loc = this.locate(action.target);
-        if (loc) await loc.fill(action.text, { timeout: this.actionTimeout });
+        if (loc) await this.withForceFallback(loc, (force) => loc.fill(action.text, { timeout: this.actionTimeout, force }));
         else if ('point' in action.target) {
           await page.mouse.click(action.target.point.x, action.target.point.y);
           await page.keyboard.type(action.text);
@@ -184,6 +184,23 @@ export class BrowserDriver implements Driver {
       case 'wait':
         await page.waitForTimeout(action.ms);
         return;
+    }
+  }
+
+  /**
+   * Pages with perpetual animation (physics, marquees, smooth-scroll libraries) never satisfy
+   * Playwright's "stable" actionability check on slow machines. If the element exists and is
+   * visible but the normal attempt times out, retry once bypassing the stability wait.
+   */
+  private async withForceFallback(loc: Locator, attempt: (force: boolean) => Promise<void>): Promise<void> {
+    try {
+      await attempt(false);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const timedOut = /Timeout \d+ms exceeded/.test(msg);
+      if (!timedOut || !(await loc.isVisible().catch(() => false))) throw err;
+      await loc.scrollIntoViewIfNeeded({ timeout: this.actionTimeout }).catch(() => {});
+      await attempt(true);
     }
   }
 

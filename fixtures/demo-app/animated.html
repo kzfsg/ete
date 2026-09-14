@@ -1,0 +1,11 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Animated</title>
+<style>
+@keyframes drift { from { transform: translateX(0); } to { transform: translateX(40px); } }
+.drift { animation: drift 300ms linear infinite alternate; display: inline-block; }
+</style></head>
+<body>
+<h1>Animated page</h1>
+<div class="drift"><button id="go">Go</button></div>
+<p id="out"></p>
+<script>document.getElementById('go').addEventListener('click', () => { document.getElementById('out').textContent = 'clicked'; });</script>
+</body></html>

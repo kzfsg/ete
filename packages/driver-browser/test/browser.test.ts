@@ -82,3 +82,17 @@ describe('BrowserDriver', () => {
     await d.stop();
   });
 });
+
+describe('BrowserDriver on perpetually animating pages', () => {
+  it('still clicks a target that never becomes stable, by falling back to a forced click', async () => {
+    const resultsDir = await mkdtemp(join(tmpdir(), 'ete-br-'));
+    const d = createBrowserDriver({ actionTimeoutMs: 1500 });
+    await d.start({ baseUrl, resultsDir });
+    await d.act({ kind: 'navigate', url: '/animated.html' });
+    const t = Date.now();
+    await d.act({ kind: 'click', target: { selector: 'role=button[name="Go"]' } });
+    expect(Date.now() - t).toBeLessThan(6000);
+    expect(await d.check({ kind: 'textVisible', text: 'clicked' })).toBe(true);
+    await d.stop();
+  });
+});
