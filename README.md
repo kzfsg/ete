@@ -59,28 +59,27 @@ start: npm run dev          # optional; omit for a deployed/preview URL
 readyTimeout: 60000
 ```
 
-## In CI
+## In CI, with a central reports site
 
 ```yaml
 - uses: kzfsg/ete/packages/action@main
   with:
     url: http://localhost:3000
     start: npm run dev
+    blob-token: ${{ secrets.ETE_BLOB_TOKEN }}     # Vercel Blob read-write token of your reports store
+    site-url: https://ete-reports.vercel.app       # your deployed reports site
 ```
 
-Each run uploads `ete-results/` as an artifact, publishes it to an `ete-media` branch in your repo, and posts one sticky
-PR comment grouped by flow: pass/fail per test, a filmstrip of the run, a link to the hosted Playwright trace viewer,
-anomalies, and for each failure the `fix:` command. The job needs `pull-requests: write` and `contents: write`.
+Every run is published to one site for all your repos: `packages/site` is a small Next.js app you deploy once to
+Vercel, backed by a Vercel Blob store. It lists repos → PRs/branches → runs, and renders each run's timeline with
+playable video, step markers, screenshots, and anomalies, streamed from Blob. The PR comment links the run and each
+test's timeline, and inlines the failing step's screenshot. Runs older than `retention-days` (default 30) are pruned.
+Agents can publish local sessions the same way with `ete publish`.
 
-**Fixing failures in CI.** Nothing in ete heals by itself. `ete init` writes a commented second job that runs your own
-coding-agent action when the replay fails; the agent runs the `fix:` command, repairs the step, replays, and commits to
-the PR branch with its own credentials.
-
-For one-click timeline links, enable GitHub Pages on the `ete-media` branch and pass `pages-url`. Set `media-branch: ''`
-to keep media out of the repo; the comment then falls back to text plus the artifact link.
-
-**Why not the video itself in the comment?** GitHub only renders media in comments when it is hosted at a fetchable URL,
-and workflows cannot upload comment attachments. The media branch is the closest thing to inline playback CI can offer.
+One-time setup: create a public Blob store and the site project on Vercel (`vercel blob create-store ete-reports
+--access public` linked to the site project), deploy `packages/site` with `vercel build --prod && vercel deploy
+--prebuilt --prod` from the repo root, then add the store's read-write token as `ETE_BLOB_TOKEN` in each repo.
+Without `blob-token`/`site-url` the comment is text plus the artifact link.
 
 ## Flows, timeline, anomalies
 
