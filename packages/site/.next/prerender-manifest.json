@@ -2,6 +2,12 @@
   "version": 4,
   "routes": {
     "/_global-error": {
+      "initialStatus": 500,
+      "initialHeaders": {
+        "x-nextjs-stale-time": "300",
+        "x-nextjs-prerender": "1",
+        "x-next-cache-tags": "_N_T_/layout,_N_T_/_global-error/layout,_N_T_/_global-error/page,_N_T_/_global-error"
+      },
       "routeType": "page",
       "response": "complete",
       "compute": "static",
@@ -31,6 +37,11 @@
     },
     "/_not-found": {
       "initialStatus": 404,
+      "initialHeaders": {
+        "x-nextjs-stale-time": "300",
+        "x-nextjs-prerender": "1",
+        "x-next-cache-tags": "_N_T_/layout,_N_T_/_not-found/layout,_N_T_/_not-found/page,_N_T_/_not-found"
+      },
       "routeType": "page",
       "response": "complete",
       "compute": "static",

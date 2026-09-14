@@ -3,3 +3,6 @@ dist/
 ete-results/
 .env
 *.log
+.vercel/
+.vercel
+.env*
