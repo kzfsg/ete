@@ -116,7 +116,7 @@ runs:
       env:
         BLOB_READ_WRITE_TOKEN: ${{ inputs.blob-token }}
         ETE_SITE_URL: ${{ inputs.site-url }}
-      run: node "$ETE_BIN" publish --retention-days "${{ inputs.retention-days }}"
+      run: node "$ETE_BIN" publish --retention-days "${{ inputs.retention-days }}" ${{ inputs.shard != '' && format('--part "{0}"', inputs.shard) || '' }}
 
     - name: Comment on PR
       if: always() && inputs.comment == 'true' && github.event_name == 'pull_request'

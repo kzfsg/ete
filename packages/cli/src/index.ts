@@ -114,9 +114,10 @@ program
   .option('--pr <n>', 'pull request number', (v) => Number(v))
   .option('--branch <name>', 'branch name when not a PR')
   .option('--run <id>', 'run id (default: GitHub run id or local-<timestamp>)')
+  .option('--part <name>', 'name of this slice of the run, e.g. a CI shard; parts of one run are merged by the site')
   .option('--retention-days <n>', 'prune this repo\'s runs older than this', (v) => Number(v), 30)
   .action(async (o) => {
-    const r = await publishCommand({ cwd: process.cwd(), site: o.site, repo: o.repo, pr: o.pr, branch: o.branch, run: o.run, retentionDays: o.retentionDays, log: (l) => console.log(l) });
+    const r = await publishCommand({ cwd: process.cwd(), site: o.site, repo: o.repo, pr: o.pr, branch: o.branch, run: o.run, part: o.part, retentionDays: o.retentionDays, log: (l) => console.log(l) });
     console.log(`\nPublished ${r.uploaded} files${r.pruned ? `, pruned ${r.pruned} old run(s)` : ''}.\n${r.url}`);
     if (process.env.GITHUB_ENV) await (await import('node:fs/promises')).appendFile(process.env.GITHUB_ENV, `REPORT_URL=${r.url}\nMANIFEST_URL=${r.manifestUrl}\n`);
   });

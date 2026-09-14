@@ -23,16 +23,39 @@ export async function listFolders(list: Lister, prefix: string): Promise<string[
   return out.sort();
 }
 
-/** All manifests under a prefix (a repo, a ref, or a run), newest first. */
+/** Merges the manifest parts of one run (e.g. CI shards) into a single manifest. */
+export function mergeParts(parts: RunManifest[]): RunManifest {
+  const byDir = new Map<string, RunManifest['tests'][number]>();
+  const sorted = [...parts].sort((a, b) => a.publishedAt.localeCompare(b.publishedAt));
+  for (const p of sorted) for (const t of p.tests) byDir.set(t.dir, t);
+  const tests = [...byDir.values()].sort((a, b) => a.flow.localeCompare(b.flow) || a.name.localeCompare(b.name));
+  const newest = sorted[sorted.length - 1]!;
+  return {
+    ...newest,
+    publishedAt: newest.publishedAt,
+    totals: { tests: tests.length, passed: tests.filter((t) => t.status === 'passed').length, anomalies: tests.reduce((n, t) => n + t.anomalyCount, 0) },
+    tests,
+  };
+}
+
+/** All runs under a prefix (a repo, a ref, or a run), parts merged, newest first. */
 export async function listRuns(list: Lister, prefix: string, fetchJson: (url: string) => Promise<unknown> = (u) => fetch(u).then((r) => r.json())): Promise<RunSummary[]> {
-  const manifests: { pathname: string; url: string }[] = [];
+  const parts: { pathname: string; url: string }[] = [];
   let cursor: string | undefined;
   do {
     const page = await list({ prefix, cursor, limit: 1000 });
-    manifests.push(...page.blobs.filter((b) => b.pathname.endsWith('/manifest.json')));
+    // `manifests/<part>.json` (current) or a legacy single `manifest.json`.
+    parts.push(...page.blobs.filter((b) => /\/(manifests\/[^/]+|manifest)\.json$/.test(b.pathname)));
     cursor = page.hasMore ? page.cursor : undefined;
   } while (cursor);
-  const runs = await Promise.all(manifests.map(async (m) => ({ ...((await fetchJson(m.url)) as RunManifest), path: m.pathname.slice(0, -'/manifest.json'.length) })));
+  const byRun = new Map<string, RunManifest[]>();
+  await Promise.all(parts.map(async (m) => {
+    const path = m.pathname.replace(/\/(manifests\/[^/]+|manifest)\.json$/, '');
+    const manifest = (await fetchJson(m.url)) as RunManifest;
+    if (!byRun.has(path)) byRun.set(path, []);
+    byRun.get(path)!.push(manifest);
+  }));
+  const runs = [...byRun.entries()].map(([path, ps]) => ({ ...mergeParts(ps), path }));
   return runs.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
 }
 

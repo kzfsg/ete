@@ -61,6 +61,8 @@ export type PublishOptions = {
   branch?: string;
   source: 'ci' | 'local';
   siteUrl: string;
+  /** Name of this publisher's slice of the run (e.g. a CI shard). Parts never overwrite each other. */
+  part?: string;
   retentionDays?: number;
   now?: Date;
   log?: (line: string) => void;
@@ -106,34 +108,20 @@ export async function publishRun(o: PublishOptions): Promise<PublishResult> {
     log(`  ↑ ${r.name} (${urls.size} files)`);
   }
 
-  // Sharded CI jobs publish to the same run id: merge with whatever is already there.
-  const existing = await readManifest(o.blob, `${prefix}manifest.json`);
-  const merged = new Map<string, RunManifest['tests'][number]>();
-  for (const t of existing?.tests ?? []) merged.set(t.dir, t);
-  for (const t of tests) merged.set(t.dir, t);
-  const allTests = [...merged.values()].sort((a, b) => a.flow.localeCompare(b.flow) || a.name.localeCompare(b.name));
   const manifest: RunManifest = {
-    version: 1, owner: o.owner, repo: o.repo, ref: o.ref, runId: o.runId, attempt: o.attempt ?? existing?.attempt, commit: o.commit ?? existing?.commit, branch: o.branch ?? existing?.branch,
+    version: 1, owner: o.owner, repo: o.repo, ref: o.ref, runId: o.runId, attempt: o.attempt, commit: o.commit, branch: o.branch,
     publishedAt: now.toISOString(), source: o.source,
-    totals: { tests: allTests.length, passed: allTests.filter((t) => t.status === 'passed').length, anomalies: allTests.reduce((n, t) => n + t.anomalyCount, 0) },
-    tests: allTests,
+    totals: { tests: tests.length, passed: tests.filter((t) => t.status === 'passed').length, anomalies: tests.reduce((n, t) => n + t.anomalyCount, 0) },
+    tests: tests.sort((a, b) => a.flow.localeCompare(b.flow) || a.name.localeCompare(b.name)),
   };
-  const { url: manifestUrl } = await o.blob.put(`${prefix}manifest.json`, JSON.stringify(manifest, null, 2), { contentType: 'application/json' });
+  // One manifest per publisher (shard). The site merges parts on read, so concurrent shards never race.
+  const part = slug(o.part ?? 'all') || 'all';
+  await o.blob.put(`${prefix}manifests/${part}.json`, JSON.stringify(manifest, null, 2), { contentType: 'application/json' });
   uploaded++;
+  const manifestUrl = `${runUrl(o.siteUrl, o)}/manifest.json`;
 
   const pruned = await prune(o.blob, `runs/${slug(o.owner)}/${slug(o.repo)}/`, (o.retentionDays ?? 30) * 86_400_000, now, log);
   return { url: runUrl(o.siteUrl, o), prefix, manifest, manifestUrl, uploaded, pruned };
-}
-
-async function readManifest(blob: BlobClient, pathname: string): Promise<RunManifest | undefined> {
-  const page = await blob.list({ prefix: pathname, limit: 1 });
-  const hit = page.blobs.find((b) => b.pathname === pathname);
-  if (!hit) return undefined;
-  try {
-    return (await blob.getJson(hit.url)) as RunManifest;
-  } catch {
-    return undefined;
-  }
 }
 
 /** Deletes runs under `repoPrefix` whose manifest is older than `maxAgeMs`. */
@@ -143,18 +131,23 @@ export async function prune(blob: BlobClient, repoPrefix: string, maxAgeMs: numb
   const manifests: { pathname: string; url: string }[] = [];
   do {
     const page = await blob.list({ prefix: repoPrefix, cursor, limit: 1000 });
-    manifests.push(...page.blobs.filter((b) => b.pathname.endsWith('/manifest.json')));
+    manifests.push(...page.blobs.filter((b) => /\/manifests\/[^/]+\.json$/.test(b.pathname)));
     cursor = page.hasMore ? page.cursor : undefined;
   } while (cursor);
+  // Group parts by run; a run is as old as its newest part.
+  const runs = new Map<string, number>();
   for (const m of manifests) {
-    let publishedAt: number;
+    const runDir = m.pathname.replace(/manifests\/[^/]+\.json$/, '');
+    let publishedAt = 0;
     try {
-      publishedAt = Date.parse(((await blob.getJson(m.url)) as { publishedAt?: string }).publishedAt ?? '');
+      publishedAt = Date.parse(((await blob.getJson(m.url)) as { publishedAt?: string }).publishedAt ?? '') || 0;
     } catch {
-      continue;
+      /* unreadable part: ignore */
     }
+    runs.set(runDir, Math.max(runs.get(runDir) ?? 0, publishedAt));
+  }
+  for (const [runDir, publishedAt] of runs) {
     if (!publishedAt || now.getTime() - publishedAt < maxAgeMs) continue;
-    const runDir = m.pathname.slice(0, -'manifest.json'.length);
     const files: string[] = [];
     let c: string | undefined;
     do {
@@ -170,7 +163,7 @@ export async function prune(blob: BlobClient, repoPrefix: string, maxAgeMs: numb
 }
 
 export type PublishCommandOptions = {
-  cwd: string; repo?: string; pr?: number; branch?: string; run?: string; attempt?: string; commit?: string; site?: string; token?: string; retentionDays?: number; log?: (l: string) => void;
+  cwd: string; repo?: string; pr?: number; branch?: string; run?: string; part?: string; attempt?: string; commit?: string; site?: string; token?: string; retentionDays?: number; log?: (l: string) => void;
 };
 
 /** CLI entry: fills defaults from git and GitHub Actions env, then publishes. */
@@ -189,7 +182,7 @@ export async function publishCommand(o: PublishCommandOptions): Promise<PublishR
   const runId = o.run ?? env.GITHUB_RUN_ID ?? `local-${Date.now()}`;
   return publishRun({
     cwd: o.cwd, blob: createBlobClient(token), owner, repo, ref, runId, attempt: o.attempt ?? env.GITHUB_RUN_ATTEMPT, commit: o.commit ?? env.GITHUB_SHA ?? (await gitSha(o.cwd)),
-    branch, source: env.GITHUB_ACTIONS ? 'ci' : 'local', siteUrl: site, retentionDays: o.retentionDays, log: o.log,
+    branch, source: env.GITHUB_ACTIONS ? 'ci' : 'local', siteUrl: site, part: o.part, retentionDays: o.retentionDays, log: o.log,
   });
 }
 

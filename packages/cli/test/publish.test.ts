@@ -63,7 +63,7 @@ describe('publishRun', () => {
     expect(out.url).toBe('https://ete-reports.vercel.app/acme/shop/pr-5/42');
     const keys = [...store.keys()].sort();
     expect(keys).toEqual([
-      'runs/acme/shop/pr-5/42/manifest.json',
+      'runs/acme/shop/pr-5/42/manifests/all.json',
       'runs/acme/shop/pr-5/42/sign-in/filmstrip.png',
       'runs/acme/shop/pr-5/42/sign-in/report.json',
       'runs/acme/shop/pr-5/42/sign-in/steps/01.png',
@@ -71,7 +71,7 @@ describe('publishRun', () => {
       'runs/acme/shop/pr-5/42/sign-in/trace.zip',
       'runs/acme/shop/pr-5/42/sign-in/video.webm',
     ]);
-    const manifest = JSON.parse(store.get('runs/acme/shop/pr-5/42/manifest.json')!.toString());
+    const manifest = JSON.parse(store.get('runs/acme/shop/pr-5/42/manifests/all.json')!.toString());
     expect(manifest).toMatchObject({
       version: 1, owner: 'acme', repo: 'shop', ref: { kind: 'pr', number: 5 }, runId: '42', attempt: '1', commit: 'abc', branch: 'feat',
       publishedAt: '2026-09-14T22:00:00.000Z', source: 'ci', totals: { tests: 1, passed: 0, anomalies: 1 },
@@ -83,7 +83,7 @@ describe('publishRun', () => {
     });
     expect(manifest.tests[0].blobs.screenshots['steps/01.png']).toBe('https://blob.test/runs/acme/shop/pr-5/42/sign-in/steps/01.png');
     expect(out.manifest).toEqual(manifest);
-    expect(out.manifestUrl).toBe('https://blob.test/runs/acme/shop/pr-5/42/manifest.json');
+    expect(out.manifestUrl).toBe('https://ete-reports.vercel.app/acme/shop/pr-5/42/manifest.json');
   });
 
   it('prunes runs older than the retention window for the same repo only', async () => {
@@ -91,28 +91,26 @@ describe('publishRun', () => {
     const old = new Date('2026-07-01T00:00:00Z').toISOString();
     const recent = new Date('2026-09-10T00:00:00Z').toISOString();
     const { client, deleted } = fakeBlob({
-      'runs/acme/shop/pr-1/old/manifest.json': JSON.stringify({ publishedAt: old }),
+      'runs/acme/shop/pr-1/old/manifests/all.json': JSON.stringify({ publishedAt: old }),
       'runs/acme/shop/pr-1/old/t/video.webm': 'v',
-      'runs/acme/shop/pr-2/recent/manifest.json': JSON.stringify({ publishedAt: recent }),
-      'runs/acme/other/pr-9/ancient/manifest.json': JSON.stringify({ publishedAt: old }),
+      'runs/acme/shop/pr-2/recent/manifests/1-2.json': JSON.stringify({ publishedAt: old }),
+      'runs/acme/shop/pr-2/recent/manifests/2-2.json': JSON.stringify({ publishedAt: recent }),
+      'runs/acme/other/pr-9/ancient/manifests/all.json': JSON.stringify({ publishedAt: old }),
     });
     const out = await publishRun({ cwd, blob: client, owner: 'acme', repo: 'shop', ref: { kind: 'pr', number: 5 }, runId: '42', source: 'ci', siteUrl: 'https://s', retentionDays: 30, now: new Date('2026-09-14T00:00:00Z') });
     expect(out.pruned).toBe(1);
-    expect(deleted.sort()).toEqual(['runs/acme/shop/pr-1/old/manifest.json', 'runs/acme/shop/pr-1/old/t/video.webm']);
+    expect(deleted.sort()).toEqual(['runs/acme/shop/pr-1/old/manifests/all.json', 'runs/acme/shop/pr-1/old/t/video.webm']);
   });
 });
 
-describe('publishRun with an existing manifest (sharded runs)', () => {
-  it('merges tests into the existing manifest for the same run id instead of replacing it', async () => {
+describe('publishRun parts (sharded runs)', () => {
+  it('writes its own manifest part and never touches other parts', async () => {
     const cwd = await results();
-    const { client, store } = fakeBlob({
-      'runs/acme/shop/pr-5/42/manifest.json': JSON.stringify({ version: 1, owner: 'acme', repo: 'shop', ref: { kind: 'pr', number: 5 }, runId: '42', publishedAt: '2026-09-14T21:00:00.000Z', source: 'ci',
-        totals: { tests: 1, passed: 1, anomalies: 0 }, tests: [{ dir: 'checkout', name: 'Checkout', flow: 'Shop', status: 'passed', durationMs: 5, anomalyCount: 0, steps: 3, blobs: { report: 'https://blob.test/r', screenshots: {} } }] }),
-    });
-    const out = await publishRun({ cwd, blob: client, owner: 'acme', repo: 'shop', ref: { kind: 'pr', number: 5 }, runId: '42', source: 'ci', siteUrl: 'https://s', now: new Date('2026-09-14T22:00:00Z') });
-    const manifest = JSON.parse(store.get('runs/acme/shop/pr-5/42/manifest.json')!.toString());
-    expect(manifest.tests.map((t: { dir: string }) => t.dir).sort()).toEqual(['checkout', 'sign-in']);
-    expect(manifest.totals).toEqual({ tests: 2, passed: 1, anomalies: 1 });
-    expect(out.manifest.tests.length).toBe(2);
+    const { client, store } = fakeBlob({ 'runs/acme/shop/pr-5/42/manifests/1-2.json': JSON.stringify({ tests: [{ dir: 'checkout' }] }) });
+    const out = await publishRun({ cwd, blob: client, owner: 'acme', repo: 'shop', ref: { kind: 'pr', number: 5 }, runId: '42', source: 'ci', siteUrl: 'https://s', part: '2/2', now: new Date('2026-09-14T22:00:00Z') });
+    expect([...store.keys()].filter((k) => k.includes('/manifests/')).sort()).toEqual(['runs/acme/shop/pr-5/42/manifests/1-2.json', 'runs/acme/shop/pr-5/42/manifests/2-2.json']);
+    expect(JSON.parse(store.get('runs/acme/shop/pr-5/42/manifests/1-2.json')!.toString())).toEqual({ tests: [{ dir: 'checkout' }] });
+    expect(out.manifest.tests.map((t) => t.dir)).toEqual(['sign-in']);
+    expect(out.manifestUrl).toBe('https://s/acme/shop/pr-5/42/manifest.json');
   });
 });
