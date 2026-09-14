@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildComment, MARKER } from '../scripts/comment.mjs';
+import { buildComment, imageUrl, MARKER } from '../scripts/comment.mjs';
 
 const step = (index, text, status, extra = {}) => ({ index, text, kind: 'action', status, durationMs: 100, anomalies: [], ...extra });
 const login = {
@@ -38,7 +38,7 @@ test('groups tests by flow with per-flow counts and links', () => {
 test('embeds the animated preview per test when media is published, else the filmstrip', () => {
   const withPreview = { ...login, recording: { ...login.recording, previewPath: 'preview.png' } };
   const md = buildComment([withPreview, pay], opts);
-  assert.match(md, /!\[Sign in with valid credentials\]\(https:\/\/raw\.githubusercontent\.com\/acme\/shop\/ete-media\/runs\/1-1\/sign-in\/preview\.png\)/);
+  assert.match(md, /!\[Sign in with valid credentials\]\(https:\/\/github\.com\/acme\/shop\/raw\/ete-media\/runs\/1-1\/sign-in\/preview\.png\)/);
   assert.match(md, /!\[Pay with saved card\]\([^)]*\/pay\/filmstrip\.png\)/);
 });
 
@@ -63,6 +63,11 @@ test('falls back to no images or timeline links when media is not published', ()
   assert.doesNotMatch(md, /trace\.playwright\.dev/);
   assert.match(md, /### Login/);
   assert.match(md, /playwright show-trace/);
+});
+
+test('image urls use the same-repo raw form so private repos render them', () => {
+  assert.equal(imageUrl('https://raw.githubusercontent.com/acme/shop/ete-media/runs/1-1', 'x/preview.png'), 'https://github.com/acme/shop/raw/ete-media/runs/1-1/x/preview.png');
+  assert.equal(imageUrl('https://cdn.example.com/media', 'x/preview.png'), 'https://cdn.example.com/media/x/preview.png');
 });
 
 test('handles no reports', () => {

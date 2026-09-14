@@ -10,6 +10,17 @@ const secs = (ms) => `${(ms / 1000).toFixed(1)}s`;
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const dirOf = (r) => parse(r.file).name;
 
+/**
+ * Image URL that renders in comments on private repos too: GitHub leaves same-repo
+ * `github.com/<owner>/<repo>/raw/<branch>/...` links unproxied, so the viewer's own session
+ * fetches them. raw.githubusercontent.com only works for public repos.
+ */
+export function imageUrl(mediaBase, path) {
+  const m = /^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/(.+)$/.exec(mediaBase);
+  const base = m ? `https://github.com/${m[1]}/${m[2]}/raw/${m[3]}` : mediaBase;
+  return `${base}/${path}`;
+}
+
 function failingStep(r) {
   const s = r.steps.find((x) => x.status === 'failed');
   if (!s) return '';
@@ -55,7 +66,7 @@ export function buildComment(reports, o) {
       lines.push(`${t.status === 'passed' ? '✅' : '❌'} ${t.name} · ${secs(t.durationMs)}${warn}${failingStep(t)}${links.length ? `  ${links.join(' · ')}` : ''}`);
       if (t.status !== 'passed') lines.push(fixHint(t));
       const preview = t.recording?.previewPath || t.recording?.filmstripPath;
-      if (o.mediaBase && preview) lines.push('', `![${t.name}](${o.mediaBase}/${dir}/${preview})`, '');
+      if (o.mediaBase && preview) lines.push('', `![${t.name}](${imageUrl(o.mediaBase, `${dir}/${preview}`)})`, '');
     }
   }
 
