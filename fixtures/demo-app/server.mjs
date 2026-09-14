@@ -9,6 +9,11 @@ const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '
 export function createDemoServer() {
   return createServer(async (req, res) => {
     const path = new URL(req.url ?? '/', 'http://x').pathname;
+    if (path === '/api/fail') {
+      res.writeHead(500, { 'content-type': 'text/plain' });
+      res.end('internal error');
+      return;
+    }
     const file = path === '/' ? 'index.html' : path.slice(1);
     try {
       const body = await readFile(join(root, file));

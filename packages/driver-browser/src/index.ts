@@ -1,14 +1,21 @@
 import { chromium, type Browser, type BrowserContext, type Locator, type Page } from 'playwright';
 import { join } from 'node:path';
 import type {
+  Anomaly,
   Driver,
   DriverStartOptions,
   Observation,
   Recording,
   ResolvedAction,
   ResolvedAssertion,
+  StepTelemetry,
   Target,
 } from '@ete/core';
+
+export { renderFilmstrip, sampleFrames } from './filmstrip.js';
+
+const MAX_MESSAGE = 500;
+const oneLine = (s: string) => s.replace(/\s+/g, ' ').trim().slice(0, MAX_MESSAGE);
 
 /**
  * Selector strings are Playwright selectors (`role=`, `text=`, `css=`, `xpath=`, `id=`, `data-testid=`),
@@ -39,6 +46,10 @@ export class BrowserDriver implements Driver {
   private page?: Page;
   private baseUrl = '';
   private resultsDir = '';
+  private t0 = 0;
+  private anomalies: Anomaly[] = [];
+  private stepStart?: number;
+  private inGroup = false;
   private readonly actionTimeout: number;
   private readonly checkTimeout: number;
   private readonly viewport: { width: number; height: number };
@@ -57,9 +68,60 @@ export class BrowserDriver implements Driver {
       viewport: this.viewport,
       recordVideo: { dir: opts.resultsDir, size: this.viewport },
     });
+    this.t0 = Date.now();
     await this.context.tracing.start({ screenshots: true, snapshots: true });
     this.page = await this.context.newPage();
     this.page.setDefaultTimeout(this.actionTimeout);
+    this.listen(this.page);
+  }
+
+  private elapsed(): number {
+    return Date.now() - this.t0;
+  }
+
+  private note(kind: Anomaly['kind'], message: string): void {
+    this.anomalies.push({ t: this.elapsed(), kind, message: oneLine(message) });
+  }
+
+  private listen(page: Page): void {
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') this.note('console-error', msg.text());
+    });
+    page.on('pageerror', (err) => this.note('page-error', err.message));
+    page.on('requestfailed', (req) => this.note('request-failed', `${req.method()} ${req.url()} — ${req.failure()?.errorText ?? 'failed'}`));
+    page.on('response', (res) => {
+      if (res.status() >= 500) this.note('http-error', `HTTP ${res.status()} ${res.request().method()} ${res.url()}`);
+    });
+    page.on('dialog', (dialog) => {
+      this.note('dialog', `${dialog.type()}: ${dialog.message()}`);
+      dialog.dismiss().catch(() => {});
+    });
+  }
+
+  async beginStep(label: string): Promise<void> {
+    const ctx = this.context;
+    if (!ctx) throw new Error('BrowserDriver not started');
+    if (this.inGroup) await ctx.tracing.groupEnd().catch(() => {});
+    this.anomalies = [];
+    this.stepStart = this.elapsed();
+    try {
+      await ctx.tracing.group(label);
+      this.inGroup = true;
+    } catch {
+      this.inGroup = false;
+    }
+  }
+
+  async endStep(): Promise<StepTelemetry> {
+    const ctx = this.context;
+    if (this.inGroup && ctx) {
+      await ctx.tracing.groupEnd().catch(() => {});
+      this.inGroup = false;
+    }
+    const telemetry: StepTelemetry = { startMs: this.stepStart ?? this.elapsed(), endMs: this.elapsed(), anomalies: this.anomalies };
+    this.anomalies = [];
+    this.stepStart = undefined;
+    return telemetry;
   }
 
   private get p(): Page {
@@ -147,6 +209,10 @@ export class BrowserDriver implements Driver {
     const { context, browser, page } = this;
     if (!context || !browser) return recording;
     const tracePath = join(this.resultsDir, 'trace.zip');
+    if (this.inGroup) {
+      await context.tracing.groupEnd().catch(() => {});
+      this.inGroup = false;
+    }
     try {
       await context.tracing.stop({ path: tracePath });
       recording.tracePath = 'trace.zip';
