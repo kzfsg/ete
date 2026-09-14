@@ -166,6 +166,33 @@ ${r.steps.map((s) => stepRow(dir, s, asset)).join('\n')}
 </section>`;
 }
 
+export const SUMMARY_CSS = `
+.summary{background:#fff;border:1px solid #e5e5e5;border-radius:8px;padding:16px;margin-bottom:24px}
+.headline{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px}
+.headline .big{font-size:22px;font-weight:600}
+.headline .stat{font-size:13px;color:#666}.headline .stat.bad{color:#991b1b}.headline .stat.warn{color:#92400e}
+.flows{display:grid;gap:6px;margin-bottom:12px}
+.flow-row{display:grid;grid-template-columns:160px 1fr 48px;align-items:center;gap:10px;font-size:13px}
+.flow-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar{display:flex;gap:2px;height:18px}
+.seg{display:inline-flex;align-items:center;justify-content:center;font-size:11px;color:#fff;border-radius:3px;min-width:14px}
+.seg.passed{background:#16a34a}.seg.failed{background:#dc2626}
+.flow-count{text-align:right}
+.legend{display:flex;gap:14px;font-size:12px;color:#666;margin-top:4px}
+.legend .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.legend .sw.passed{background:#16a34a}.legend .sw.failed{background:#dc2626}
+.failures{list-style:none;padding:0;margin:0;border-top:1px solid #eee}
+.failures li{padding:8px 0;border-bottom:1px solid #eee;font-size:14px}
+.failures a{color:#1a1a1a;font-weight:500}
+.fail-detail{font-size:12px;color:#555;margin-top:2px}
+.error-inline{font-family:ui-monospace,monospace;color:#991b1b}
+.history{display:flex;align-items:flex-end;gap:3px;height:44px;margin-left:auto}
+.history .muted{align-self:center;margin-right:6px}
+.hbar{display:inline-block;width:10px;border-radius:2px 2px 0 0;background:#16a34a;opacity:.55}
+.hbar.failed{background:#dc2626}.hbar.current{opacity:1;outline:2px solid #111;outline-offset:1px}
+.hbar:hover{opacity:1}
+`;
+
 const CSS = `
 :root{font-family:ui-sans-serif,system-ui,sans-serif;color:#1a1a1a;background:#fafafa}
 body{margin:0;padding:24px;max-width:1100px;margin-inline:auto}
@@ -269,14 +296,68 @@ document.querySelectorAll('section.test').forEach(function (sec) {
 });
 `;
 
-function page(reports: Report[], asset: AssetUrl, title?: string): string {
+export type HistoryEntry = { runId: string; passed: number; tests: number; publishedAt: string; url: string; current?: boolean };
+export type RenderOptions = { history?: HistoryEntry[] };
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** The strip above the recordings: headline counts, per-flow bars, failures, and run history. */
+export function summarySection(reports: Report[], opts: RenderOptions): string {
+  const passed = reports.filter((r) => r.status === 'passed').length;
+  const failed = reports.length - passed;
+  const anomalies = reports.reduce((n, r) => n + (r.anomalyCount ?? 0), 0);
+  const flows = new Map<string, Report[]>();
+  for (const r of reports) flows.set(r.flow, [...(flows.get(r.flow) ?? []), r]);
+  const maxPerFlow = Math.max(1, ...[...flows.values()].map((t) => t.length));
+
+  const rows = [...flows.entries()]
+    .sort((a, b) => Number(b[1].some((t) => t.status === 'failed')) - Number(a[1].some((t) => t.status === 'failed')) || a[0].localeCompare(b[0]))
+    .map(([flow, tests]) => {
+      const ok = tests.filter((t) => t.status === 'passed').length;
+      const bad = tests.length - ok;
+      const width = (tests.length / maxPerFlow) * 100;
+      const seg = (cls: string, n: number) => (n ? `<span class="seg ${cls}" style="width:${Math.round((n / tests.length) * 10000) / 100}%">${n}</span>` : '');
+      return `<div class="flow-row" data-flow="${esc(flow)}"><span class="flow-name">${esc(flow)}</span><span class="bar" style="width:${width}%">${seg('passed', ok)}${seg('failed', bad)}</span><span class="flow-count muted">${ok}/${tests.length}</span></div>`;
+    })
+    .join('');
+
+  const failures = reports
+    .filter((r) => r.status === 'failed')
+    .map((r) => {
+      const dir = resultsDirName(r.file);
+      const step = r.steps.find((st) => st.status === 'failed');
+      const detail = step ? `step ${step.index}: ${step.kind === 'expect' ? 'expect ' : ''}${esc(step.text)}${step.error ? ` <span class="error-inline">${esc(step.error.split('\n')[0]!)}</span>` : ''}` : '';
+      return `<li><span class="badge failed">failed</span> <a href="#play=${esc(dir)}">${esc(r.name)}</a> <span class="muted">${esc(r.flow)}</span><div class="fail-detail">${detail}</div></li>`;
+    })
+    .join('');
+
+  const history = opts.history?.length
+    ? `<div class="history" aria-label="Previous runs of this branch"><span class="muted">runs</span>${opts.history
+        .map((h) => {
+          const cls = `hbar ${h.passed === h.tests ? 'passed' : 'failed'}${h.current ? ' current' : ''}`;
+          const height = Math.max(8, Math.round((h.tests ? h.passed / h.tests : 0) * 40));
+          const when = h.publishedAt.replace('T', ' ').slice(0, 16);
+          return `<a class="${cls}" href="${esc(h.url)}" style="height:${height}px" title="run ${esc(h.runId)} · ${h.passed}/${h.tests} passed · ${when}"></a>`;
+        })
+        .join('')}</div>`
+    : '';
+
+  return `<div class="summary">
+<div class="headline"><span class="big">${passed} of ${reports.length} passed</span><span class="stat ${failed ? 'bad' : ''}">❌ ${plural(failed, 'failed', 'failed')}</span><span class="stat ${anomalies ? 'warn' : ''}">⚠️ ${plural(anomalies, 'anomaly', 'anomalies')}</span>${history}</div>
+<div class="flows" role="img" aria-label="Passed and failed tests per flow">${rows}<div class="legend"><span><i class="sw passed"></i>✅ passed</span><span><i class="sw failed"></i>❌ failed</span></div></div>
+${failed ? `<ul class="failures">${failures}</ul>` : ''}
+</div>`;
+}
+
+function page(reports: Report[], asset: AssetUrl, title?: string, opts: RenderOptions = {}): string {
   const passed = reports.filter((r) => r.status === 'passed').length;
   const anomalies = reports.reduce((n, r) => n + (r.anomalyCount ?? 0), 0);
   const heading = `ete results · ${passed}/${reports.length} passed${anomalies ? ` · <span class="warn">${anomalies} anomalies</span>` : ''}`;
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>${esc(title ?? 'ete results')}</title><style>${CSS}${PLAYER_CSS}</style></head>
+<html lang="en"><head><meta charset="utf-8"><title>${esc(title ?? 'ete results')}</title><style>${CSS}${SUMMARY_CSS}${PLAYER_CSS}</style></head>
 <body>
 <h1>${heading}${title ? ` <small class="muted">${esc(title)}</small>` : ''}${reports.some((r) => r.recording.videoPath) ? ' <button class="open-player" data-dir="">▶ Open player</button>' : ''}</h1>
+${summarySection(reports, opts)}
 ${reports.map((r) => testSection(r, asset)).join('\n')}
 ${PLAYER_SHELL}
 <script type="application/json" id="ete-data">${jsonForScript(playerData(reports, asset))}</script>
@@ -396,8 +477,8 @@ export function renderHtml(reports: Report[], title?: string): string {
 }
 
 /** Report with assets resolved by the caller (e.g. blob URLs on the central site). */
-export function renderHtmlWith(reports: Report[], asset: AssetUrl, title?: string): string {
-  return page(reports, asset, title);
+export function renderHtmlWith(reports: Report[], asset: AssetUrl, title?: string, opts: RenderOptions = {}): string {
+  return page(reports, asset, title, opts);
 }
 
 const MIME: Record<string, string> = { '.png': 'image/png', '.webm': 'video/webm', '.mp4': 'video/mp4', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif' };

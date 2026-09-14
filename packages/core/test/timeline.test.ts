@@ -92,3 +92,44 @@ describe('player', () => {
     expect(out).toContain('\\u003c/script>');
   });
 });
+
+describe('summary at the top of the report', () => {
+  const passedLogin: Report = {
+    name: 'Sign in', file: 'e2e/login/sign-in.yaml', flow: 'Login', mode: 'replay', status: 'passed', durationMs: 900, anomalyCount: 2,
+    recording: { videoPath: 'video.webm' },
+    steps: [{ index: 1, text: 'go to /', kind: 'action', status: 'passed', durationMs: 100, startMs: 0, endMs: 100, anomalies: [{ t: 1, kind: 'console-error', message: 'x' }, { t: 2, kind: 'http-error', message: 'y' }] }],
+  };
+  const html = renderHtml([report, passedLogin, { ...passedLogin, name: 'Sign out', file: 'e2e/login/sign-out.yaml' }]);
+
+  it('leads with the headline counts', () => {
+    const i = html.indexOf('class="summary"');
+    expect(i).toBeGreaterThan(0);
+    expect(i).toBeLessThan(html.indexOf('<section class="test'));
+    expect(html).toMatch(/<div class="summary">[\s\S]*2 of 3 passed[\s\S]*1 failed[\s\S]*5 anomalies/);
+  });
+  it('shows one bar per flow with passed and failed counts as labels', () => {
+    expect(html).toMatch(/<div class="flow-row"[^>]*>[\s\S]*?Checkout[\s\S]*?class="seg failed"[^>]*style="width:100%"[^>]*>1</);
+    expect(html).toMatch(/Login[\s\S]*?class="seg passed"[^>]*style="width:100%"[^>]*>2</);
+  });
+  it('lists every failure with its step, error, and a play link', () => {
+    expect(html).toMatch(/class="failures">[\s\S]*?<a href="#play=pay">Checkout<\/a>[\s\S]*?step 3[\s\S]*?shows Order confirmed[\s\S]*?Assertion failed/);
+  });
+  it('renders a run-history row when history is supplied', async () => {
+    const { renderHtmlWith } = await import('../src/report.js');
+    const out = renderHtmlWith([report], (d, r) => `${d}/${r}`, 'Run 3', {
+      history: [
+        { runId: '1', passed: 3, tests: 3, publishedAt: '2026-09-12T10:00:00Z', url: '/r/1' },
+        { runId: '2', passed: 2, tests: 3, publishedAt: '2026-09-13T10:00:00Z', url: '/r/2' },
+        { runId: '3', passed: 2, tests: 3, publishedAt: '2026-09-14T10:00:00Z', url: '/r/3', current: true },
+      ],
+    });
+    expect(out).toMatch(/class="history"/);
+    expect(out.match(/class="hbar[^"]*"/g)?.length).toBe(3);
+    expect(out).toMatch(/class="hbar failed current"/);
+    expect(out).toMatch(/<a class="hbar passed" href="\/r\/1"[^>]*title="run 1 · 3\/3 passed/);
+    expect(renderHtml([report])).not.toMatch(/class="history"/);
+  });
+  it('omits the failures list when everything passed', () => {
+    expect(renderHtml([passedLogin])).not.toMatch(/class="failures"/);
+  });
+});
