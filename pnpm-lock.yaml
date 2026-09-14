@@ -20,6 +20,8 @@ importers:
 
   fixtures/demo-app: {}
 
+  packages/action: {}
+
   packages/cli:
     dependencies:
       '@ai-sdk/anthropic':

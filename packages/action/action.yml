@@ -1,0 +1,102 @@
+name: 'ete E2E tests'
+description: 'Run LLM-authored, deterministically replayed E2E tests with self-heal, recordings, and a PR comment'
+author: 'kzfsg'
+branding:
+  icon: 'check-circle'
+  color: 'green'
+
+inputs:
+  url:
+    description: 'Base URL of the app under test (overrides ete.yaml)'
+    required: false
+  start:
+    description: 'Command that serves the app (overrides ete.yaml). Leave empty for a deployed URL.'
+    required: false
+  config:
+    description: 'Path to ete.yaml'
+    required: false
+    default: 'ete.yaml'
+  tests:
+    description: 'Test files or globs (space separated). Default: e2e/**/*.yaml'
+    required: false
+    default: ''
+  comment:
+    description: 'Post/update a sticky PR comment with results'
+    required: false
+    default: 'true'
+  working-directory:
+    description: 'Directory containing ete.yaml'
+    required: false
+    default: '.'
+  node-version:
+    description: 'Node version to use'
+    required: false
+    default: '20'
+
+outputs:
+  outcome:
+    description: '"success" or "failure"'
+    value: ${{ steps.run.outcome }}
+  results-dir:
+    description: 'Path to ete-results/'
+    value: ${{ inputs.working-directory }}/ete-results
+
+runs:
+  using: 'composite'
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Build ete
+      shell: bash
+      run: |
+        set -euo pipefail
+        ROOT="${{ github.action_path }}/../.."
+        cd "$ROOT"
+        npm i -g pnpm@11 >/dev/null
+        pnpm install --frozen-lockfile
+        pnpm -r --filter '@ete/core' --filter '@ete/driver-browser' --filter 'ete' build
+        echo "ETE_BIN=$ROOT/packages/cli/dist/index.js" >> "$GITHUB_ENV"
+        cd packages/driver-browser && npx playwright install --with-deps chromium
+
+    - name: Run tests
+      id: run
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      continue-on-error: true
+      run: |
+        set -uo pipefail
+        ARGS=(run --ci --config "${{ inputs.config }}")
+        [ -n "${{ inputs.url }}" ] && ARGS+=(--url "${{ inputs.url }}")
+        [ -n "${{ inputs.start }}" ] && ARGS+=(--start "${{ inputs.start }}")
+        # shellcheck disable=SC2206
+        [ -n "${{ inputs.tests }}" ] && ARGS+=(${{ inputs.tests }})
+        node "$ETE_BIN" "${ARGS[@]}"
+
+    - name: Upload recordings
+      id: upload
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ete-results-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ inputs.working-directory }}/ete-results
+        if-no-files-found: ignore
+        retention-days: 14
+
+    - name: Comment on PR
+      if: always() && inputs.comment == 'true' && github.event_name == 'pull_request'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+      run: node "${{ github.action_path }}/scripts/comment.mjs"
+
+    - name: Fail if tests failed
+      if: steps.run.outcome == 'failure'
+      shell: bash
+      run: |
+        echo "::error::ete E2E tests failed. See the PR comment or the ete-results artifact."
+        exit 1
