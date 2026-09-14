@@ -7,7 +7,7 @@ const report: Report = {
   recording: { videoPath: 'video.webm', tracePath: 'trace.zip', filmstripPath: 'filmstrip.png' },
   steps: [
     { index: 1, text: 'go to /cart', kind: 'action', status: 'passed', durationMs: 500, screenshot: 'steps/01.png', startMs: 0, endMs: 500, anomalies: [] },
-    { index: 2, text: 'click Pay', kind: 'action', status: 'healed', durationMs: 1500, screenshot: 'steps/02.png', startMs: 500, endMs: 2000,
+    { index: 2, text: 'click Pay', kind: 'action', status: 'passed', durationMs: 1500, screenshot: 'steps/02.png', startMs: 500, endMs: 2000,
       anomalies: [{ t: 1000, kind: 'console-error', message: 'boom' }] },
     { index: 3, text: 'shows Order confirmed', kind: 'expect', status: 'failed', durationMs: 2000, screenshot: 'steps/03.png', startMs: 2000, endMs: 4000, error: 'Assertion failed', anomalies: [] },
     { index: 4, text: 'shows receipt', kind: 'expect', status: 'skipped', durationMs: 0, anomalies: [] },
@@ -20,7 +20,7 @@ describe('markersFor', () => {
     expect(m.total).toBe(4000);
     expect(m.markers).toEqual([
       { kind: 'step', index: 1, status: 'passed', t: 0, pct: 0, label: '1. go to /cart' },
-      { kind: 'step', index: 2, status: 'healed', t: 500, pct: 12.5, label: '2. click Pay' },
+      { kind: 'step', index: 2, status: 'passed', t: 500, pct: 12.5, label: '2. click Pay' },
       { kind: 'anomaly', index: 2, status: 'anomaly', t: 1000, pct: 25, label: 'console-error: boom' },
       { kind: 'step', index: 3, status: 'failed', t: 2000, pct: 50, label: '3. expect: shows Order confirmed' },
     ]);

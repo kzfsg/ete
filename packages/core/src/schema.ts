@@ -60,7 +60,7 @@ export type Anomaly = {
   message: string;
 };
 export type StepTelemetry = { startMs: number; endMs: number; anomalies: Anomaly[] };
-export type StepStatus = 'passed' | 'resolved' | 'healed' | 'failed' | 'skipped';
+export type StepStatus = 'passed' | 'failed' | 'skipped';
 export type StepReport = {
   index: number;
   text: string;
@@ -69,7 +69,6 @@ export type StepReport = {
   durationMs: number;
   screenshot?: string;
   error?: string;
-  healedFrom?: ResolvedEntry;
   entry?: ResolvedEntry;
   /** ms since recording start; absent for skipped steps */
   startMs?: number;
@@ -80,7 +79,7 @@ export type Report = {
   name: string;
   file: string;
   flow: string;
-  mode: 'replay' | 'explore';
+  mode: 'replay' | 'session';
   status: 'passed' | 'failed';
   anomalyCount: number;
   durationMs: number;

@@ -1,6 +1,6 @@
 import type { Driver, DriverStartOptions } from '../src/driver.js';
 import type { Anomaly, Observation, Recording, ResolvedAction, ResolvedAssertion, StepTelemetry } from '../src/schema.js';
-import { png } from './helpers.js';
+const png = Buffer.from('89504e470d0a1a0a', 'hex');
 
 export class FakeDriver implements Driver {
   calls: string[] = [];

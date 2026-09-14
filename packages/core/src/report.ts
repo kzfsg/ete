@@ -144,7 +144,7 @@ video{width:100%;max-height:420px;background:#000;border-radius:6px;display:bloc
 .rail{position:relative;height:22px;margin:6px 0 12px;background:#f0f0f0;border-radius:4px}
 .playhead{position:absolute;top:0;bottom:0;width:2px;background:#111;left:0;pointer-events:none}
 .marker{position:absolute;top:3px;width:10px;height:16px;margin-left:-5px;border:0;border-radius:2px;cursor:pointer;padding:0;background:#9ca3af}
-.marker.status-passed{background:#22c55e}.marker.status-resolved{background:#3b82f6}.marker.status-healed{background:#f59e0b}
+.marker.status-passed{background:#22c55e}
 .marker.status-failed{background:#ef4444}.marker.status-skipped{background:#d1d5db}
 .marker.anomaly{background:#facc15;top:8px;width:8px;height:8px;margin-left:-4px;border-radius:50%}
 .marker:hover{outline:2px solid #111}
@@ -159,8 +159,6 @@ td.idx,td.dur{color:#666;white-space:nowrap}
 .kind{font-size:11px;color:#555;background:#eee;border-radius:3px;padding:1px 4px}
 .badge{font-size:11px;border-radius:999px;padding:2px 8px;background:#e5e5e5;text-transform:uppercase;letter-spacing:.03em}
 .status-passed>.status .badge,.status-passed>h2 .badge{background:#d4f4dd;color:#146c2e}
-.status-resolved>.status .badge{background:#dbeafe;color:#1e40af}
-.status-healed>.status .badge{background:#fef3c7;color:#92400e}
 .status-failed>.status .badge,.status-failed>h2 .badge{background:#fee2e2;color:#991b1b}
 .status-skipped>.status .badge{background:#f3f4f6;color:#6b7280}
 .error{margin-top:6px;font-family:ui-monospace,monospace;font-size:12px;color:#991b1b;white-space:pre-wrap}

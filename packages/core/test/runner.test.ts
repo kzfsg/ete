@@ -2,8 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runTest, type RunOptions } from '../src/runner.js';
-import { createFakeResolver, type ResolveInput } from '../src/resolver.js';
+import { runTest, resumeHint, NO_RECORDED_ACTION, type RunOptions } from '../src/runner.js';
 import { hashStep, emptyResolved, type ResolvedFile } from '../src/cache.js';
 import type { ResolvedEntry, TestFile } from '../src/schema.js';
 import { FakeDriver } from './fake-driver.js';
@@ -21,144 +20,77 @@ async function opts(partial: Partial<RunOptions> & Pick<RunOptions, 'test'>): Pr
   return {
     testPath: 'e2e/t.yaml',
     driver: new FakeDriver(),
-    resolver: createFakeResolver({}),
     resolved: emptyResolved(),
     baseUrl: 'http://fake',
     resultsDir: await mkdtemp(join(tmpdir(), 'ete-run-')),
-    heal: { maxPerRun: 5, maxPerStep: 2 },
-    ci: false,
     ...partial,
   };
 }
 
 describe('runTest', () => {
-  it('resolves a cache miss, runs it, and stores the entry', async () => {
+  it('replays cached actions and assertions', async () => {
     const driver = new FakeDriver();
-    let resolverCalls = 0;
-    const resolver = createFakeResolver((i: ResolveInput) => { resolverCalls++; return clickSignIn; });
-    const o = await opts({ test: test([{ kind: 'action', text: 'click Sign in' }]), driver, resolver });
-    const { report, resolved } = await runTest(o);
-    expect(resolverCalls).toBe(1);
-    expect(report.steps[0].status).toBe('resolved');
+    driver.visibleTexts.add('Welcome');
+    const o = await opts({ test: test([{ kind: 'action', text: 'click Sign in' }, { kind: 'expect', text: 'shows welcome' }]), driver, resolved: resolvedWith({ 'click Sign in': clickSignIn, 'shows welcome': welcome }) });
+    const { report } = await runTest(o);
     expect(driver.acted).toEqual([clickSignIn]);
-    expect(resolved.steps[hashStep('click Sign in')]).toEqual(clickSignIn);
+    expect(driver.checked).toEqual([welcome]);
+    expect(report.steps.map((s) => s.status)).toEqual(['passed', 'passed']);
     expect(report.status).toBe('passed');
+    expect(report.mode).toBe('replay');
   });
 
-  it('runs a cache hit without calling the resolver', async () => {
-    const driver = new FakeDriver();
-    let resolverCalls = 0;
-    const resolver = createFakeResolver(() => { resolverCalls++; return clickSignIn; });
-    const o = await opts({ test: test([{ kind: 'action', text: 'click Sign in' }]), driver, resolver, resolved: resolvedWith({ 'click Sign in': clickSignIn }) });
+  it('fails a step with no recorded action and points at the resume command', async () => {
+    const lines: string[] = [];
+    const o = await opts({ testPath: 'e2e/login/a.yaml', test: test([{ kind: 'action', text: 'new step' }, { kind: 'action', text: 'never' }]), log: (l) => lines.push(l) });
     const { report } = await runTest(o);
-    expect(resolverCalls).toBe(0);
-    expect(report.steps[0].status).toBe('passed');
-  });
-
-  it('heals when a cached action throws', async () => {
-    const driver = new FakeDriver();
-    const stale: ResolvedEntry = { kind: 'click', target: { selector: 'text=Login' } };
-    driver.failOn.add('text=Login');
-    const seen: ResolveInput[] = [];
-    const resolver = createFakeResolver((i) => { seen.push(i); return clickSignIn; });
-    const o = await opts({ test: test([{ kind: 'action', text: 'click Sign in' }]), driver, resolver, resolved: resolvedWith({ 'click Sign in': stale }) });
-    const { report, resolved, healed } = await runTest(o);
-    expect(seen[0].previous?.entry).toEqual(stale);
-    expect(seen[0].previous?.error).toMatch(/Timeout/);
-    expect(driver.acted).toEqual([stale, clickSignIn]);
-    expect(report.steps[0].status).toBe('healed');
-    expect(report.steps[0].healedFrom).toEqual(stale);
-    expect(resolved.steps[hashStep('click Sign in')]).toEqual(clickSignIn);
-    expect(healed.steps[hashStep('click Sign in')]).toEqual(clickSignIn);
-    expect(report.status).toBe('passed');
-  });
-
-  it('fails and skips the rest when the heal budget is exhausted', async () => {
-    const driver = new FakeDriver();
-    driver.failOn.add('text=Login');
-    const stale: ResolvedEntry = { kind: 'click', target: { selector: 'text=Login' } };
-    let resolverCalls = 0;
-    const resolver = createFakeResolver(() => { resolverCalls++; return clickSignIn; });
-    const o = await opts({
-      test: test([{ kind: 'action', text: 'click Sign in' }, { kind: 'action', text: 'never' }]),
-      driver, resolver, resolved: resolvedWith({ 'click Sign in': stale }), heal: { maxPerRun: 0, maxPerStep: 2 },
-    });
-    const { report } = await runTest(o);
-    expect(resolverCalls).toBe(0);
     expect(report.steps[0].status).toBe('failed');
+    expect(report.steps[0].error).toContain(NO_RECORDED_ACTION);
+    expect(report.steps[1].status).toBe('skipped');
+    expect(lines.join('\n')).toContain(resumeHint('e2e/login/a.yaml', 1));
+    expect(resumeHint('e2e/login/a.yaml', 1)).toBe('ete session start --from e2e/login/a.yaml --at 1');
+  });
+
+  it('fails when a cached action throws, skips the rest, and never retries', async () => {
+    const driver = new FakeDriver();
+    driver.failOn.add('text=Login');
+    const stale: ResolvedEntry = { kind: 'click', target: { selector: 'text=Login' } };
+    const o = await opts({ test: test([{ kind: 'action', text: 'click Sign in' }, { kind: 'action', text: 'never' }]), driver, resolved: resolvedWith({ 'click Sign in': stale, never: clickSignIn }) });
+    const { report } = await runTest(o);
+    expect(driver.acted.length).toBe(1);
+    expect(report.steps[0]).toMatchObject({ status: 'failed', entry: stale });
     expect(report.steps[0].error).toMatch(/Timeout/);
     expect(report.steps[1].status).toBe('skipped');
     expect(report.status).toBe('failed');
   });
 
-  it('fails when the healed action also throws', async () => {
+  it('fails a false assertion without consulting anything', async () => {
     const driver = new FakeDriver();
-    driver.failOn.add('text=Login');
-    driver.failOn.add('role=button[name="Sign in"]');
-    const stale: ResolvedEntry = { kind: 'click', target: { selector: 'text=Login' } };
-    const resolver = createFakeResolver(() => clickSignIn);
-    const o = await opts({ test: test([{ kind: 'action', text: 'click Sign in' }]), driver, resolver, resolved: resolvedWith({ 'click Sign in': stale }), heal: { maxPerRun: 5, maxPerStep: 1 } });
+    const o = await opts({ test: test([{ kind: 'expect', text: 'shows welcome' }]), driver, resolved: resolvedWith({ 'shows welcome': welcome }) });
     const { report } = await runTest(o);
+    expect(driver.checked.length).toBe(1);
     expect(report.steps[0].status).toBe('failed');
-    expect(driver.acted.length).toBe(2);
-  });
-
-  it('re-resolves a failing assertion once, then fails if still false', async () => {
-    const driver = new FakeDriver();
-    let resolverCalls = 0;
-    const resolver = createFakeResolver(() => { resolverCalls++; return { kind: 'textVisible', text: 'Welcome back' }; });
-    const o = await opts({ test: test([{ kind: 'expect', text: 'shows welcome' }]), driver, resolver, resolved: resolvedWith({ 'shows welcome': welcome }) });
-    const { report } = await runTest(o);
-    expect(resolverCalls).toBe(1);
-    expect(driver.checked.length).toBe(2);
-    expect(driver.acted.length).toBe(0);
-    expect(report.steps[0].status).toBe('failed');
-    expect(report.steps[0].error).toMatch(/assertion/i);
-  });
-
-  it('passes a re-resolved assertion that then holds', async () => {
-    const driver = new FakeDriver();
-    driver.visibleTexts.add('Welcome back');
-    const resolver = createFakeResolver(() => ({ kind: 'textVisible', text: 'Welcome back' }));
-    const o = await opts({ test: test([{ kind: 'expect', text: 'shows welcome' }]), driver, resolver, resolved: resolvedWith({ 'shows welcome': welcome }) });
-    const { report } = await runTest(o);
-    expect(report.steps[0].status).toBe('healed');
+    expect(report.steps[0].error).toMatch(/Assertion failed/);
   });
 
   it('takes a numbered screenshot after each executed step and stops the driver', async () => {
     const driver = new FakeDriver();
     driver.visibleTexts.add('Welcome');
-    const o = await opts({
-      test: test([{ kind: 'action', text: 'click Sign in' }, { kind: 'expect', text: 'shows welcome' }]),
-      driver, resolved: resolvedWith({ 'click Sign in': clickSignIn, 'shows welcome': welcome }),
-    });
+    const o = await opts({ test: test([{ kind: 'action', text: 'click Sign in' }, { kind: 'expect', text: 'shows welcome' }]), driver, resolved: resolvedWith({ 'click Sign in': clickSignIn, 'shows welcome': welcome }) });
     const { report } = await runTest(o);
     expect(driver.screenshots).toEqual([join(o.resultsDir, 'steps', '01.png'), join(o.resultsDir, 'steps', '02.png')]);
     expect(report.steps.map((s) => s.screenshot)).toEqual(['steps/01.png', 'steps/02.png']);
     expect(driver.stopped).toBe(true);
     expect(report.recording).toEqual({ videoPath: 'video.webm', tracePath: 'trace.zip' });
-    expect(driver.startOpts).toMatchObject({ baseUrl: 'http://fake', resultsDir: o.resultsDir });
   });
 
   it('marks remaining steps skipped and still stops the driver when it crashes', async () => {
     const driver = new FakeDriver();
     driver.crash = new Error('browser closed');
-    const o = await opts({
-      test: test([{ kind: 'action', text: 'click Sign in' }, { kind: 'action', text: 'next' }]),
-      driver, resolved: resolvedWith({ 'click Sign in': clickSignIn, next: clickSignIn }), heal: { maxPerRun: 0, maxPerStep: 0 },
-    });
+    const o = await opts({ test: test([{ kind: 'action', text: 'click Sign in' }, { kind: 'action', text: 'next' }]), driver, resolved: resolvedWith({ 'click Sign in': clickSignIn, next: clickSignIn }) });
     const { report } = await runTest(o);
     expect(report.steps.map((s) => s.status)).toEqual(['failed', 'skipped']);
     expect(driver.stopped).toBe(true);
-  });
-
-  it('fails the step with the resolver error when resolution itself throws', async () => {
-    const driver = new FakeDriver();
-    const resolver = createFakeResolver(() => { throw new Error('Missing ANTHROPIC_API_KEY'); });
-    const o = await opts({ test: test([{ kind: 'action', text: 'click Sign in' }]), driver, resolver });
-    const { report } = await runTest(o);
-    expect(report.steps[0].status).toBe('failed');
-    expect(report.steps[0].error).toMatch(/ANTHROPIC_API_KEY/);
   });
 });
 
@@ -170,23 +102,20 @@ describe('runTest telemetry', () => {
     const stale: ResolvedEntry = { kind: 'click', target: { selector: 'text=Nope' } };
     const o = await opts({
       test: test([{ kind: 'action', text: 'click Sign in' }, { kind: 'action', text: 'then fail' }, { kind: 'action', text: 'never' }]),
-      driver, resolved: resolvedWith({ 'click Sign in': clickSignIn, 'then fail': stale, never: clickSignIn }), heal: { maxPerRun: 0, maxPerStep: 0 },
+      driver, resolved: resolvedWith({ 'click Sign in': clickSignIn, 'then fail': stale, never: clickSignIn }),
     });
     const { report } = await runTest(o);
     expect(driver.stepLabels).toEqual(['click Sign in', 'then fail']);
     expect(report.steps[0]).toMatchObject({ status: 'passed', startMs: 10, endMs: 110, anomalies: [{ kind: 'console-error', message: 'boom', t: 5 }] });
     expect(report.steps[1]).toMatchObject({ status: 'failed', startMs: 120, endMs: 220, anomalies: [] });
     expect(report.steps[2].startMs).toBeUndefined();
-    expect(report.steps[2].anomalies).toEqual([]);
     expect(report.anomalyCount).toBe(1);
-    expect(report.mode).toBe('replay');
     expect(report.flow).toBe('General');
   });
   it('derives the flow from the path or the declared field', async () => {
-    const driver = new FakeDriver();
-    const o = await opts({ testPath: 'e2e/checkout/pay.yaml', test: test([{ kind: 'action', text: 'click Sign in' }]), driver, resolved: resolvedWith({ 'click Sign in': clickSignIn }) });
+    const o = await opts({ testPath: 'e2e/checkout/pay.yaml', test: test([{ kind: 'action', text: 'click Sign in' }]), resolved: resolvedWith({ 'click Sign in': clickSignIn }) });
     expect((await runTest(o)).report.flow).toBe('Checkout');
-    const o2 = await opts({ testPath: 'e2e/checkout/pay.yaml', test: { ...test([{ kind: 'action', text: 'click Sign in' }]), flow: 'Buying' }, driver: new FakeDriver(), resolved: resolvedWith({ 'click Sign in': clickSignIn }) });
+    const o2 = await opts({ testPath: 'e2e/checkout/pay.yaml', test: { ...test([{ kind: 'action', text: 'click Sign in' }]), flow: 'Buying' }, resolved: resolvedWith({ 'click Sign in': clickSignIn }) });
     expect((await runTest(o2)).report.flow).toBe('Buying');
   });
 });

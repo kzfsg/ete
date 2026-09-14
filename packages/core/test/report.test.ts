@@ -10,7 +10,7 @@ const passed: Report = {
   recording: { videoPath: 'video.webm', tracePath: 'trace.zip' },
   steps: [
     { index: 1, text: 'go to /login', kind: 'action', status: 'passed', durationMs: 300, screenshot: 'steps/01.png', anomalies: [] },
-    { index: 2, text: 'click Sign in', kind: 'action', status: 'healed', durationMs: 900, screenshot: 'steps/02.png', anomalies: [] },
+    { index: 2, text: 'click Sign in', kind: 'action', status: 'passed', durationMs: 900, screenshot: 'steps/02.png', anomalies: [] },
   ],
 };
 const failed: Report = {
@@ -60,7 +60,7 @@ describe('renderHtml', () => {
   });
   it('marks step status with a class and escapes html in step text', () => {
     expect(html).toContain('status-failed');
-    expect(html).toContain('status-healed');
+    expect(html).toContain('status-passed');
     expect(html).toContain('click Buy &lt;now&gt;');
     expect(html).toContain('Timeout 5000ms');
   });
