@@ -25,6 +25,28 @@ the failing step and fix it. ete never calls a model and never needs credentials
 6. **Tell the user** what the PR comment will show: per flow, pass/fail per test, a filmstrip, a
    timeline link, a trace link, and anomalies.
 
+## Many flows at once: fan out to cheap subagents
+
+Recording is narrow work: look at the page, take one action, assert one outcome. A small, cheap
+model does it well **when the goal is precise**. Keep the judgement with the strong model.
+
+1. **Decompose (strong model).** Turn the request into concrete goals, one per test, each stating
+   the expected outcome: not "checkout works" but "a user with an expired card sees the 'card
+   declined' message and stays on checkout". Group them into flows. Write the list down.
+2. **Fan out (cheap subagents, in parallel).** Give each subagent one goal and one session id:
+   `ete session start --id <slug> --name "<goal>" --flow "<Flow>"`, then the observe → act → expect
+   loop, then `ete session save --id <slug>`. Every command takes `--id`. Sessions share the running
+   app; for flows that write shared state, give each its own app with `--port <n>` (the start command
+   and URL may use `{port}`). Tell subagents: one UI action per step, quote literal text, assert after
+   every transition, stop when the goal is met, and never invent a step that did not work.
+3. **Review (strong model).** Read each saved `e2e/<flow>/<slug>.yaml`: it must reach the goal and
+   contain at least one `expect`. Reject and re-record anything thin or off-goal.
+4. **Verify.** `ete run --workers 4` (or more, if tests do not share state). Everything must pass.
+5. **Commit** `e2e/` including `.resolved/`.
+
+For fixes, subagents can run the `fix:` command and re-record a stale step, but the decision
+"regression or stale test?" goes to the strong model when the page no longer matches the goal.
+
 ## Driving a session
 
 ```bash

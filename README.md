@@ -81,6 +81,16 @@ One-time setup: create a public Blob store and the site project on Vercel (`verc
 --prebuilt --prod` from the repo root, then add the store's read-write token as `ETE_BLOB_TOKEN` in each repo.
 Without `blob-token`/`site-url` the comment is text plus the artifact link.
 
+## Scaling to hundreds of tests
+
+- **Authoring in parallel:** `ete session start --id <name>` runs any number of recording sessions side by side in one
+  project, so an orchestrating agent can fan goals out to cheap subagents. `--port <n>` gives a session its own app
+  instance (`{port}` in `start`/`url` is substituted); otherwise sessions share the running app.
+- **Replay in parallel:** `ete run --workers 8` replays tests concurrently, one browser each. Tests must not share app
+  state. `--shard 2/4` runs one slice of the suite; use a CI matrix with the `shard` input and every shard publishes to
+  the same run on the reports site.
+- **Readable results:** past ten tests the PR comment leads with failures and collapses passing flows.
+
 ## Flows, timeline, anomalies
 
 - `flow:` in a test file (or its `e2e/<flow>/` directory) groups tests in output and in the PR comment.
