@@ -13,7 +13,7 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     permissions:
-      contents: write        # publish recordings to the ete-media branch
+      contents: read
       pull-requests: write   # post the results comment
     steps:
       - uses: actions/checkout@v4
@@ -25,6 +25,9 @@ jobs:
         with:
           # url and start default to the values in ete.yaml
           url: \${{ vars.ETE_URL }}
+          # Publish every run to your central ete reports site (see packages/site in the ete repo).
+          blob-token: \${{ secrets.ETE_BLOB_TOKEN }}
+          site-url: \${{ vars.ETE_SITE_URL }}
 
   # Optional: let your coding agent fix a failing test on the PR branch. ete itself never needs
   # credentials; this job uses whatever agent action and auth you already have. The agent follows

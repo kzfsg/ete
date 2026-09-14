@@ -14,7 +14,8 @@ describe('ete init', () => {
     expect(cfg).toContain('start: npm run dev');
     expect(await readFile(join(cwd, '.gitignore'), 'utf8')).toContain('ete-results/');
     const wf = await readFile(join(cwd, '.github/workflows/ete.yml'), 'utf8');
-    expect(wf).toContain('contents: write');
+    expect(wf).toContain('contents: read');
+    expect(wf).toContain('blob-token');
     expect(wf).not.toContain('API_KEY');
     expect(wf).toContain('# heal:');
     expect((await stat(join(cwd, 'e2e'))).isDirectory()).toBe(true);
