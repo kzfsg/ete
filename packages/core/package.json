@@ -1,1 +1,21 @@
-{"name":"@ete/core","version":"0.0.1","private":true,"type":"module","dependencies":{"@ai-sdk/anthropic":"^4.0.53","ai":"^7.0.99","yaml":"^2.9.1","zod":"^4.6.4"}}
+{
+  "name": "@ete/core",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.53",
+    "ai": "^7.0.99",
+    "yaml": "^2.8.2",
+    "zod": "^4.6.4"
+  }
+}

@@ -1,0 +1,35 @@
+{
+	"version": 2,
+	"names": {
+		"ete-monorepo:": "Test Workspace Config",
+		"folder:.other": "Test Workspace Config",
+		"@ete/core:": "Core Tests",
+		"folder:packages/core": "Core Tests"
+	},
+	"prose": {
+		"ete-monorepo:": {
+			"name": "Test Workspace Config",
+			"kind": "config",
+			"summary": "A Vitest workspace definition, which organizes how the test runner sees projects in a monorepo.\n\nProvides the root vitest.workspace.ts file for the repository level test setup.\n\nruns at test startup.\n\nUsed by Vitest before any package tests run.",
+			"role": "Coordinates test project discovery."
+		},
+		"folder:.other": {
+			"name": "Test Workspace Config",
+			"kind": "config",
+			"summary": "A Vitest workspace definition, which organizes how the test runner sees projects in a monorepo.\n\nProvides the root vitest.workspace.ts file for the repository level test setup.\n\nruns at test startup.\n\nUsed by Vitest before any package tests run.",
+			"role": "Coordinates test project discovery."
+		},
+		"@ete/core:": {
+			"name": "Core Tests",
+			"kind": "library",
+			"summary": "A unit test area, which contains assertions that check behavior in the core package.\n\nHolds packages/core/test/schema.test.ts, a schema focused test file under packages/core.\n\nruns under the test runner.\n\nRuns within Vitest, alongside the workspace config from g0.",
+			"role": "Handles schema verification for the core package."
+		},
+		"folder:packages/core": {
+			"name": "Core Tests",
+			"kind": "library",
+			"summary": "A unit test area, which contains assertions that check behavior in the core package.\n\nHolds packages/core/test/schema.test.ts, a schema focused test file under packages/core.\n\nruns under the test runner.\n\nRuns within Vitest, alongside the workspace config from g0.",
+			"role": "Handles schema verification for the core package."
+		}
+	}
+}
