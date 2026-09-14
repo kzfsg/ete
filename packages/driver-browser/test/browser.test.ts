@@ -96,3 +96,17 @@ describe('BrowserDriver on perpetually animating pages', () => {
     await d.stop();
   });
 });
+
+describe('BrowserDriver click that triggers navigation', () => {
+  it('waits for the navigation with the navigation timeout, not the action timeout', async () => {
+    const resultsDir = await mkdtemp(join(tmpdir(), 'ete-br-'));
+    const d = createBrowserDriver({ actionTimeoutMs: 700, navigationTimeoutMs: 10000 });
+    await d.start({ baseUrl, resultsDir });
+    await d.act({ kind: 'navigate', url: '/nav.html' });
+    await d.act({ kind: 'click', target: { selector: 'role=button[name="Go to slow page"]' } });
+    // Exactly one click must have happened: a retry would double-submit real forms.
+    expect(await d.check({ kind: 'urlMatches', pattern: '/slow\\?clicks=1$' })).toBe(true);
+    expect(await d.check({ kind: 'textVisible', text: 'Slow page' })).toBe(true);
+    await d.stop();
+  });
+});

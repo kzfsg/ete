@@ -9,6 +9,14 @@ const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '
 export function createDemoServer() {
   return createServer(async (req, res) => {
     const path = new URL(req.url ?? '/', 'http://x').pathname;
+    if (path === '/slow') {
+      // Simulates a route that takes longer than an action timeout to render.
+      setTimeout(() => {
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        res.end('<!doctype html><html><body><h1>Slow page</h1></body></html>');
+      }, 1500);
+      return;
+    }
     if (path === '/api/fail') {
       res.writeHead(500, { 'content-type': 'text/plain' });
       res.end('internal error');

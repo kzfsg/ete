@@ -1,0 +1,5 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Nav</title></head>
+<body><h1>Nav page</h1>
+<button id="go">Go to slow page</button>
+<script>let clicks = 0; document.getElementById('go').addEventListener('click', () => { clicks++; location.href = '/slow?clicks=' + clicks; });</script>
+</body></html>

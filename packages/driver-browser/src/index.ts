@@ -201,7 +201,14 @@ export class BrowserDriver implements Driver {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const timedOut = /Timeout \d+ms exceeded/.test(msg);
-      if (!timedOut || !(await loc.isVisible().catch(() => false))) throw err;
+      if (!timedOut) throw err;
+      // The action itself already happened and Playwright was only waiting for the navigation it
+      // triggered. Never retry (that would double-submit); wait for the page with the navigation budget.
+      if (/waiting for scheduled navigations to finish/.test(msg)) {
+        await this.p.waitForLoadState('load', { timeout: this.navigationTimeout }).catch(() => {});
+        return;
+      }
+      if (!(await loc.isVisible().catch(() => false))) throw err;
       await loc.scrollIntoViewIfNeeded({ timeout: this.actionTimeout }).catch(() => {});
       await attempt(true, this.actionTimeout);
     }
