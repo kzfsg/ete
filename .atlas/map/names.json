@@ -13,7 +13,8 @@
 		"ete:": "CLI Tests",
 		"folder:packages/cli": "CLI Tests",
 		"ete:src ete:test": "CLI Tests",
-		"ete:src ete:src/commands ete:test": "CLI Tests"
+		"ete:src ete:src/commands ete:test": "CLI Tests",
+		"ete:src ete:src/commands ete:src/session ete:test": "CLI Tests"
 	},
 	"prose": {
 		"ete-monorepo:": {
@@ -37,8 +38,8 @@
 		"folder:packages/core": {
 			"name": "Core Tests",
 			"kind": "library",
-			"summary": "A test engine library that models test files, resolves actions and assertions, executes steps, and turns runs into reports. It is the shared domain layer used by both the CLI and the browser driver.\n\nDefines schemas and types for targets, steps, observations, recordings, reports, and failures, plus parse, run, resolve, cache, and report helpers.\n\nPure library with no standalone process.\n\nUsed by the CLI package for commands, and by the browser driver for the driver contract.",
-			"role": "Coordinates parsing, execution, and reporting."
+			"summary": "A shared domain library for test plans, recorded steps, observations, and reports. It also contains parsing, caching, and timeline related helpers used by the rest of the repo.\n\nDefines TargetSchema, Step, RawTestFile, parseTestFile, Observation, Anomaly, StepReport, Report, emptyResolved, hashStep, and loadResolved.\n\nPure library with no runtime of its own.\n\nUsed by the CLI and browser driver packages, and exercised by core tests.",
+			"role": "Defines shared test run models and helpers."
 		},
 		"ete-monorepo:fixtures": {
 			"name": "Demo Fixture Server",
@@ -55,20 +56,20 @@
 		"@ete/core:src @ete/core:test": {
 			"name": "Core Tests",
 			"kind": "library",
-			"summary": "A test engine library that models test files, resolves actions and assertions, executes steps, and turns runs into reports. It is the shared domain layer used by both the CLI and the browser driver.\n\nDefines schemas and types for targets, steps, observations, recordings, reports, and failures, plus parse, run, resolve, cache, and report helpers.\n\nPure library with no standalone process.\n\nUsed by the CLI package for commands, and by the browser driver for the driver contract.",
-			"role": "Coordinates parsing, execution, and reporting."
+			"summary": "A shared domain library for test plans, recorded steps, observations, and reports. It also contains parsing, caching, and timeline related helpers used by the rest of the repo.\n\nDefines TargetSchema, Step, RawTestFile, parseTestFile, Observation, Anomaly, StepReport, Report, emptyResolved, hashStep, and loadResolved.\n\nPure library with no runtime of its own.\n\nUsed by the CLI and browser driver packages, and exercised by core tests.",
+			"role": "Defines shared test run models and helpers."
 		},
 		"@ete/driver-browser:src @ete/driver-browser:test": {
 			"name": "Browser Automation Driver",
 			"kind": "library",
-			"summary": "A browser automation adapter that presents a driver shaped API for locating elements and performing checks, actions, observations, and screenshots. It bridges the core runner to a concrete browser implementation.\n\nExports the browser driver factory, driver options, locator helper, lifecycle methods, and action methods used by tests and CLI commands.\n\nLibrary called from other code.\n\nBuilds on the core library, and is called by the CLI commands and browser tests.",
-			"role": "Handles browser specific test actions."
+			"summary": "A browser automation driver package with telemetry and filmstrip support. It wraps browser interaction primitives and exposes sampled screenshot frames for reporting.\n\nDefines BrowserDriver, BrowserDriver.start, beginStep, observe, locate, act, check, screenshot, stop, and sampleFrames.\n\nLibrary code used at runtime by callers.\n\nBuilds on the core library and is used by the CLI session and command layers, plus browser tests.",
+			"role": "Handles browser automation and frame sampling."
 		},
 		"folder:packages/driver-browser": {
 			"name": "Browser Automation Driver",
 			"kind": "library",
-			"summary": "A browser automation adapter that presents a driver shaped API for locating elements and performing checks, actions, observations, and screenshots. It bridges the core runner to a concrete browser implementation.\n\nExports the browser driver factory, driver options, locator helper, lifecycle methods, and action methods used by tests and CLI commands.\n\nLibrary called from other code.\n\nBuilds on the core library, and is called by the CLI commands and browser tests.",
-			"role": "Handles browser specific test actions."
+			"summary": "A browser automation driver package with telemetry and filmstrip support. It wraps browser interaction primitives and exposes sampled screenshot frames for reporting.\n\nDefines BrowserDriver, BrowserDriver.start, beginStep, observe, locate, act, check, screenshot, stop, and sampleFrames.\n\nLibrary code used at runtime by callers.\n\nBuilds on the core library and is used by the CLI session and command layers, plus browser tests.",
+			"role": "Handles browser automation and frame sampling."
 		},
 		"ete:": {
 			"name": "CLI Tests",
@@ -79,8 +80,8 @@
 		"folder:packages/cli": {
 			"name": "CLI Tests",
 			"kind": "gateway",
-			"summary": "A command line entry layer that prepares runtime configuration and exposes user facing commands. It sits above the core runner and browser driver and translates process inputs into library calls.\n\nProvides model creation, lazy resolver setup, app lifecycle helpers, config loading, the command program, and the run and report command implementations.\n\nRuns as a CLI process.\n\nCalls the core library for parsing and running tests, and uses the browser driver when commands need automation.",
-			"role": "Handles command line config and commands."
+			"summary": "A command line entrypoint and configuration layer. It contains the program bootstrap plus helpers for reading config and starting the app.\n\nDefines program, session, cwd, out, AppHandle, waitForUrl, startApp, ConfigSchema, Config, parseConfig, and loadConfig.\n\nRuns as the command line entrypoint.\n\nCalls the CLI commands layer, and the CLI tests drive it.",
+			"role": "Handles command startup and config resolution."
 		},
 		"ete:src ete:test": {
 			"name": "CLI Tests",
@@ -93,6 +94,12 @@
 			"kind": "gateway",
 			"summary": "A command line entry layer that prepares runtime configuration and exposes user facing commands. It sits above the core runner and browser driver and translates process inputs into library calls.\n\nProvides model creation, lazy resolver setup, app lifecycle helpers, config loading, the command program, and the run and report command implementations.\n\nRuns as a CLI process.\n\nCalls the core library for parsing and running tests, and uses the browser driver when commands need automation.",
 			"role": "Handles command line config and commands."
+		},
+		"ete:src ete:src/commands ete:src/session ete:test": {
+			"name": "CLI Tests",
+			"kind": "gateway",
+			"summary": "A command line entrypoint and configuration layer. It contains the program bootstrap plus helpers for reading config and starting the app.\n\nDefines program, session, cwd, out, AppHandle, waitForUrl, startApp, ConfigSchema, Config, parseConfig, and loadConfig.\n\nRuns as the command line entrypoint.\n\nCalls the CLI commands layer, and the CLI tests drive it.",
+			"role": "Handles command startup and config resolution."
 		}
 	}
 }

@@ -3,7 +3,8 @@ import { Command } from 'commander';
 import { runCommand } from './commands/run.js';
 import { reportCommand } from './commands/report.js';
 import { initCommand } from './commands/init.js';
-import { exploreCommand } from './commands/explore.js';
+import { sessionAbort, sessionAct, sessionExpect, sessionObserve, sessionSave, sessionServe, sessionStart, sessionStatus, sessionUndo } from './commands/session.js';
+import { fileURLToPath } from 'node:url';
 
 const program = new Command();
 program.name('ete').description('LLM-authored, deterministically replayed E2E tests for CI').version('0.0.1');
@@ -33,30 +34,61 @@ program
     console.log('\nNext: `ete author "<what a user should be able to do>"` then `ete run`.');
   });
 
-const exploreOpts = (cmd: Command) =>
-  cmd
-    .argument('<goal>', 'what a user should be able to do, e.g. "a user can log in"')
-    .option('--flow <name>', 'group this test under a user flow (also sets the e2e/ subfolder)')
-    .option('-o, --out <path>', 'where to write the test (default: e2e/<flow>/<slug>.yaml)')
-    .option('-c, --config <path>', 'path to ete.yaml', 'ete.yaml')
-    .option('--url <url>', 'override the base URL from ete.yaml')
-    .option('--headed', 'show the browser', false)
-    .option('--max-actions <n>', 'exploration budget', (v) => Number(v), 30);
+const session = program.command('session').description('Drive a recorded browser session yourself (for agents); no model involved');
+const cwd = () => process.cwd();
+const out = (text: string) => console.log(text);
 
-exploreOpts(program.command('explore'))
-  .description('Let the LLM drive the browser through a flow, recording it; --save writes a replayable test')
-  .option('--save', 'write e2e/<flow>/<slug>.yaml and its resolved actions', false)
-  .action(async (goal: string, o) => {
-    const { report } = await exploreCommand({ cwd: process.cwd(), goal, flow: o.flow, save: o.save, out: o.out, config: o.config, url: o.url, headed: o.headed, maxActions: o.maxActions });
-    process.exitCode = report.status === 'passed' ? 0 : 1;
+session
+  .command('start')
+  .description('Start a session: a new test, or resume an existing one at a step')
+  .option('--name <name>', 'name of the new test')
+  .option('--flow <flow>', 'user flow the test belongs to')
+  .option('-o, --out <path>', 'test file path (default: e2e/<flow>/<slug>.yaml)')
+  .option('--from <test>', 'existing test file to resume')
+  .option('--at <n>', 'step to resume at (steps before it are replayed)', (v) => Number(v))
+  .option('-c, --config <path>', 'path to ete.yaml', 'ete.yaml')
+  .option('--url <url>', 'override the base URL from ete.yaml')
+  .option('--headed', 'show the browser', false)
+  .action(async (o) => out(await sessionStart({ cwd: cwd(), bin: fileURLToPath(import.meta.url), ...o })));
+
+session
+  .command('serve', { hidden: true })
+  .option('--name <name>').option('--flow <flow>').option('-o, --out <path>').option('--from <test>').option('--at <n>', '', (v) => Number(v))
+  .option('-c, --config <path>', '', 'ete.yaml').option('--url <url>').option('--headed', '', false)
+  .action(async (o) => sessionServe({ cwd: cwd(), ...o }));
+
+session
+  .command('observe')
+  .description('Print the current URL, accessibility tree, and screenshot path')
+  .action(async () => out(await sessionObserve(cwd())));
+
+session
+  .command('act')
+  .description('Perform one action and record it if it succeeds: goto <url> | click <sel> | type <sel> <text> | press <key> | scroll <dy> [sel] | wait <ms>')
+  .argument('<args...>')
+  .option('--as <text>', 'natural-language step text to record instead of the default')
+  .action(async (args: string[], o) => {
+    const r = await sessionAct(cwd(), args, o.as);
+    out(r.text);
+    if (!r.ok) process.exitCode = 1;
   });
 
-exploreOpts(program.command('author'))
-  .description('Alias for `explore --save`')
-  .action(async (goal: string, o) => {
-    const { report } = await exploreCommand({ cwd: process.cwd(), goal, flow: o.flow, save: true, out: o.out, config: o.config, url: o.url, headed: o.headed, maxActions: o.maxActions });
-    process.exitCode = report.status === 'passed' ? 0 : 1;
+session
+  .command('expect')
+  .description('Check an assertion and record it if it holds: text <text> | visible <sel> | url <regex>')
+  .argument('<args...>')
+  .option('--as <text>', 'natural-language step text to record instead of the default')
+  .option('--record', 'record the assertion even if it fails', false)
+  .action(async (args: string[], o) => {
+    const r = await sessionExpect(cwd(), args, o.as, o.record);
+    out(r.text);
+    if (!r.ok) process.exitCode = 1;
   });
+
+session.command('status').description('Show recorded steps and the current page').action(async () => out(await sessionStatus(cwd())));
+session.command('undo').description('Drop the last recorded step (browser state is not rewound)').action(async () => out(await sessionUndo(cwd())));
+session.command('save').description('Write the test + recorded actions, finish the recording, stop').action(async () => out(await sessionSave(cwd())));
+session.command('abort').description('Discard the session and stop').action(async () => out(await sessionAbort(cwd())));
 
 program
   .command('report')

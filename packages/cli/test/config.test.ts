@@ -11,16 +11,15 @@ describe('parseConfig', () => {
       url: 'http://localhost:3000',
       start: undefined,
       readyTimeout: 60000,
-      llm: { provider: 'anthropic', model: 'claude-opus-5' },
-      heal: { maxPerRun: 5, maxPerStep: 2 },
     });
   });
   it('accepts overrides', () => {
-    const c = parseConfig('url: http://x\nstart: npm run dev\nreadyTimeout: 10\nllm:\n  provider: openai\n  model: gpt-5\nheal:\n  maxPerRun: 1\n');
+    const c = parseConfig('url: http://x\nstart: npm run dev\nreadyTimeout: 10\n');
     expect(c.start).toBe('npm run dev');
     expect(c.readyTimeout).toBe(10);
-    expect(c.llm).toEqual({ provider: 'openai', model: 'gpt-5' });
-    expect(c.heal).toEqual({ maxPerRun: 1, maxPerStep: 2 });
+  });
+  it('ignores legacy llm/heal keys', () => {
+    expect(() => parseConfig('url: http://x\nllm:\n  provider: anthropic\nheal:\n  maxPerRun: 1\n')).not.toThrow();
   });
   it('requires url', () => {
     expect(() => parseConfig('start: x\n')).toThrow(/url/);

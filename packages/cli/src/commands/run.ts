@@ -1,5 +1,5 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { join, relative, resolve } from 'node:path';
+import { mkdir, readFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import fg from 'fast-glob';
 import {
   flowFor,
@@ -8,29 +8,27 @@ import {
   parseTestFile,
   resolvedPathFor,
   resultsDirName,
+  resumeHint,
   runTest,
-  saveResolved,
   writeReport,
   type Driver,
   type Report,
-  type Resolver,
 } from '@ete/core';
 import { createBrowserDriver, renderFilmstrip } from '@ete/driver-browser';
 import { startApp } from '../app.js';
 import { loadConfig } from '../config.js';
-import { createLazyResolver } from '../model.js';
 
 export type RunCommandOptions = {
   cwd: string;
   files: string[];
-  ci: boolean;
+  /** Accepted for compatibility; replay never writes to e2e/ anyway. */
+  ci?: boolean;
   headed?: boolean;
   config?: string;
   url?: string;
   start?: string;
   log?: (line: string) => void;
-  /** Test seams. */
-  resolver?: Resolver;
+  /** Test seam. */
   createDriver?: () => Driver;
 };
 
@@ -63,7 +61,6 @@ export async function runCommand(opts: RunCommandOptions): Promise<number> {
     return 1;
   }
 
-  const resolver = opts.resolver ?? createLazyResolver(cfg.llm);
   const createDriver = opts.createDriver ?? (() => createBrowserDriver());
 
   const app = await startApp({ start, url, readyTimeout: cfg.readyTimeout, log });
@@ -86,31 +83,18 @@ export async function runCommand(opts: RunCommandOptions): Promise<number> {
         log(`\n## ${flow}`);
       }
       log(`${test.name} (${file})`);
-      const { report, resolved, healed } = await runTest({
+      const { report } = await runTest({
         testPath: file,
         test,
         driver: createDriver(),
-        resolver,
         resolved: await loadResolved(resolvedPath),
         baseUrl: url,
         resultsDir,
-        heal: cfg.heal,
-        ci: opts.ci,
         headed: opts.headed,
         log: (l) => log(`  ${l}`),
       });
       await writeFilmstrip(resultsDir, report);
       await writeReport(resultsDir, report);
-      const changed = Object.keys(healed.steps).length > 0;
-      if (changed) {
-        if (opts.ci) {
-          await writeFile(join(resultsDir, 'resolved.healed.json'), JSON.stringify(healed, null, 2) + '\n');
-          log(`  ${Object.keys(healed.steps).length} step(s) resolved/healed in CI; run \`ete run ${file}\` locally to persist them.`);
-        } else {
-          await saveResolved(resolvedPath, resolved);
-          log(`  updated ${relative(opts.cwd, resolvedPath)}`);
-        }
-      }
       reports.push(report);
       log(`  ${glyph(report.status === 'passed' ? 'passed' : 'failed')} ${report.status} in ${report.durationMs} ms${report.anomalyCount ? ` · ${report.anomalyCount} anomal${report.anomalyCount === 1 ? 'y' : 'ies'}` : ''}`);
     }
@@ -119,6 +103,10 @@ export async function runCommand(opts: RunCommandOptions): Promise<number> {
   }
 
   const failed = reports.filter((r) => r.status === 'failed').length;
+  for (const r of reports.filter((r) => r.status === 'failed')) {
+    const step = r.steps.find((s) => s.status === 'failed');
+    if (step) log(`\nTo fix "${r.name}": ${resumeHint(r.file, step.index)}`);
+  }
   log(`\n${reports.length - failed}/${reports.length} passed. Results in ${RESULTS_DIR}/ (run \`ete report\` to view).`);
   return failed ? 1 : 0;
 }

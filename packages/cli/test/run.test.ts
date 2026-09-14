@@ -31,7 +31,7 @@ const resolved = {
 async function project(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'ete-proj-'));
   await mkdir(join(dir, 'e2e', '.resolved'), { recursive: true });
-  await writeFile(join(dir, 'ete.yaml'), `url: ${url}\nheal:\n  maxPerRun: 0\n`);
+  await writeFile(join(dir, 'ete.yaml'), `url: ${url}\n`);
   await writeFile(join(dir, 'e2e', 'login.yaml'), loginYaml);
   await writeFile(join(dir, 'e2e', '.resolved', 'login.json'), JSON.stringify(resolved));
   return dir;
@@ -39,9 +39,7 @@ async function project(): Promise<string> {
 
 describe('ete run', () => {
   it('replays a fully resolved test with no api key and writes results', async () => {
-    const saved = process.env.ANTHROPIC_API_KEY;
-    delete process.env.ANTHROPIC_API_KEY;
-    try {
+    {
       const cwd = await project();
       const lines: string[] = [];
       const code = await runCommand({ cwd, files: [], ci: true, log: (l) => lines.push(l) });
@@ -52,43 +50,19 @@ describe('ete run', () => {
       expect((await stat(join(cwd, 'ete-results', 'login', 'video.webm'))).size).toBeGreaterThan(0);
       expect((await stat(join(cwd, 'ete-results', 'login', 'steps', '04.png'))).size).toBeGreaterThan(0);
       expect(lines.join('\n')).toMatch(/✓ 4\./);
-    } finally {
-      if (saved !== undefined) process.env.ANTHROPIC_API_KEY = saved;
     }
   });
 
-  it('fails an unresolved step with the missing-key message and exits 1', async () => {
-    const saved = process.env.ANTHROPIC_API_KEY;
-    delete process.env.ANTHROPIC_API_KEY;
-    try {
-      const cwd = await project();
-      await writeFile(join(cwd, 'e2e', 'new.yaml'), 'name: New\nsteps:\n  - go to /login.html\n  - click something unknown\n');
-      const code = await runCommand({ cwd, files: ['e2e/new.yaml'], ci: false, log: () => {} });
-      expect(code).toBe(1);
-      const report = JSON.parse(await readFile(join(cwd, 'ete-results', 'new', 'report.json'), 'utf8'));
-      expect(report.steps[0].status).toBe('failed');
-      expect(report.steps[0].error).toMatch(/ANTHROPIC_API_KEY/);
-    } finally {
-      if (saved !== undefined) process.env.ANTHROPIC_API_KEY = saved;
-    }
-  });
-
-  it('writes resolved.healed.json in ci mode and updates e2e/.resolved locally', async () => {
+  it('fails a step with no recorded action and prints the resume command', async () => {
     const cwd = await project();
-    const stale = { ...resolved, steps: { ...resolved.steps, [hashStep(steps[2])]: { kind: 'click', target: { selector: 'text=Nope' } } } };
-    await writeFile(join(cwd, 'e2e', '.resolved', 'login.json'), JSON.stringify(stale));
-    await writeFile(join(cwd, 'ete.yaml'), `url: ${url}\n`);
-    const fixed = { kind: 'click', target: { selector: 'role=button[name="Sign in"]' } };
-    const resolver = { resolve: async () => fixed as never };
-
-    const ci = await runCommand({ cwd, files: [], ci: true, log: () => {}, resolver });
-    expect(ci).toBe(0);
-    const healed = JSON.parse(await readFile(join(cwd, 'ete-results', 'login', 'resolved.healed.json'), 'utf8'));
-    expect(healed.steps[hashStep(steps[2])]).toEqual(fixed);
-    expect(JSON.parse(await readFile(join(cwd, 'e2e', '.resolved', 'login.json'), 'utf8'))).toEqual(stale);
-
-    const local = await runCommand({ cwd, files: [], ci: false, log: () => {}, resolver });
-    expect(local).toBe(0);
-    expect(JSON.parse(await readFile(join(cwd, 'e2e', '.resolved', 'login.json'), 'utf8')).steps[hashStep(steps[2])]).toEqual(fixed);
+    await writeFile(join(cwd, 'e2e', 'new.yaml'), 'name: New\nsteps:\n  - go to /login.html\n  - click something unknown\n');
+    const lines: string[] = [];
+    const code = await runCommand({ cwd, files: ['e2e/new.yaml'], log: (l) => lines.push(l) });
+    expect(code).toBe(1);
+    const report = JSON.parse(await readFile(join(cwd, 'ete-results', 'new', 'report.json'), 'utf8'));
+    expect(report.steps[0].status).toBe('failed');
+    expect(report.steps[0].error).toMatch(/No recorded action/);
+    expect(lines.join('\n')).toContain('ete session start --from e2e/new.yaml --at 1');
   });
+
 });

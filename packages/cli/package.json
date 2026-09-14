@@ -3,21 +3,21 @@
   "version": "0.0.1",
   "description": "LLM-authored, deterministically replayed E2E tests for CI",
   "type": "module",
-  "bin": { "ete": "./dist/index.js" },
+  "bin": {
+    "ete": "./dist/index.js"
+  },
   "main": "./dist/index.js",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/index.js",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^4.0.53",
-    "@ai-sdk/google": "^4.0.0",
-    "@ai-sdk/openai": "^4.0.0",
     "@ete/core": "workspace:*",
     "@ete/driver-browser": "workspace:*",
-    "ai": "^7.0.99",
     "commander": "^14.0.0",
     "fast-glob": "^3.3.3",
     "yaml": "^2.8.2",
