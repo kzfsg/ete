@@ -4,20 +4,29 @@
 		"ete-monorepo:": "Test Workspace Config",
 		"folder:.other": "Test Workspace Config",
 		"@ete/core:": "Core Tests",
-		"folder:packages/core": "Core Tests"
+		"folder:packages/core": "Core Tests",
+		"ete-monorepo:fixtures": "Demo Fixture Server",
+		"folder:fixtures": "Demo Fixture Server",
+		"@ete/core:src @ete/core:test": "Core Tests",
+		"@ete/driver-browser:src @ete/driver-browser:test": "Browser Automation Driver",
+		"folder:packages/driver-browser": "Browser Automation Driver",
+		"ete:": "CLI Tests",
+		"folder:packages/cli": "CLI Tests",
+		"ete:src ete:test": "CLI Tests",
+		"ete:src ete:src/commands ete:test": "CLI Tests"
 	},
 	"prose": {
 		"ete-monorepo:": {
 			"name": "Test Workspace Config",
 			"kind": "config",
-			"summary": "A Vitest workspace definition, which organizes how the test runner sees projects in a monorepo.\n\nProvides the root vitest.workspace.ts file for the repository level test setup.\n\nruns at test startup.\n\nUsed by Vitest before any package tests run.",
-			"role": "Coordinates test project discovery."
+			"summary": "A workspace configuration layer, it tells the test runner how to assemble projects. It exists to organize test execution rather than implement product logic.\n\nProvides vitest.workspace.ts at the repository root.\n\nRuns at test tool startup.\n\nVitest reads it to discover workspace projects.",
+			"role": "Handles repository test project wiring."
 		},
 		"folder:.other": {
 			"name": "Test Workspace Config",
 			"kind": "config",
-			"summary": "A Vitest workspace definition, which organizes how the test runner sees projects in a monorepo.\n\nProvides the root vitest.workspace.ts file for the repository level test setup.\n\nruns at test startup.\n\nUsed by Vitest before any package tests run.",
-			"role": "Coordinates test project discovery."
+			"summary": "A workspace configuration layer, it tells the test runner how to assemble projects. It exists to organize test execution rather than implement product logic.\n\nProvides vitest.workspace.ts at the repository root.\n\nRuns at test tool startup.\n\nVitest reads it to discover workspace projects.",
+			"role": "Handles repository test project wiring."
 		},
 		"@ete/core:": {
 			"name": "Core Tests",
@@ -28,8 +37,62 @@
 		"folder:packages/core": {
 			"name": "Core Tests",
 			"kind": "library",
-			"summary": "A unit test area, which contains assertions that check behavior in the core package.\n\nHolds packages/core/test/schema.test.ts, a schema focused test file under packages/core.\n\nruns under the test runner.\n\nRuns within Vitest, alongside the workspace config from g0.",
-			"role": "Handles schema verification for the core package."
+			"summary": "A test engine library that models test files, resolves actions and assertions, executes steps, and turns runs into reports. It is the shared domain layer used by both the CLI and the browser driver.\n\nDefines schemas and types for targets, steps, observations, recordings, reports, and failures, plus parse, run, resolve, cache, and report helpers.\n\nPure library with no standalone process.\n\nUsed by the CLI package for commands, and by the browser driver for the driver contract.",
+			"role": "Coordinates parsing, execution, and reporting."
+		},
+		"ete-monorepo:fixtures": {
+			"name": "Demo Fixture Server",
+			"kind": "service",
+			"summary": "A fixture service, it stands in for an application under test. Fixtures like this let browser and core tests point at a stable target without depending on a real deployment.\n\nExports createDemoServer, root, and types from fixtures/demo-app/server.mjs.\n\nRuns when imported by tests.\n\nBrowser tests and core tests use it as their target app.",
+			"role": "Serves a demo application for integration tests."
+		},
+		"folder:fixtures": {
+			"name": "Demo Fixture Server",
+			"kind": "service",
+			"summary": "A fixture service, it stands in for an application under test. Fixtures like this let browser and core tests point at a stable target without depending on a real deployment.\n\nExports createDemoServer, root, and types from fixtures/demo-app/server.mjs.\n\nRuns when imported by tests.\n\nBrowser tests and core tests use it as their target app.",
+			"role": "Serves a demo application for integration tests."
+		},
+		"@ete/core:src @ete/core:test": {
+			"name": "Core Tests",
+			"kind": "library",
+			"summary": "A test engine library that models test files, resolves actions and assertions, executes steps, and turns runs into reports. It is the shared domain layer used by both the CLI and the browser driver.\n\nDefines schemas and types for targets, steps, observations, recordings, reports, and failures, plus parse, run, resolve, cache, and report helpers.\n\nPure library with no standalone process.\n\nUsed by the CLI package for commands, and by the browser driver for the driver contract.",
+			"role": "Coordinates parsing, execution, and reporting."
+		},
+		"@ete/driver-browser:src @ete/driver-browser:test": {
+			"name": "Browser Automation Driver",
+			"kind": "library",
+			"summary": "A browser automation adapter that presents a driver shaped API for locating elements and performing checks, actions, observations, and screenshots. It bridges the core runner to a concrete browser implementation.\n\nExports the browser driver factory, driver options, locator helper, lifecycle methods, and action methods used by tests and CLI commands.\n\nLibrary called from other code.\n\nBuilds on the core library, and is called by the CLI commands and browser tests.",
+			"role": "Handles browser specific test actions."
+		},
+		"folder:packages/driver-browser": {
+			"name": "Browser Automation Driver",
+			"kind": "library",
+			"summary": "A browser automation adapter that presents a driver shaped API for locating elements and performing checks, actions, observations, and screenshots. It bridges the core runner to a concrete browser implementation.\n\nExports the browser driver factory, driver options, locator helper, lifecycle methods, and action methods used by tests and CLI commands.\n\nLibrary called from other code.\n\nBuilds on the core library, and is called by the CLI commands and browser tests.",
+			"role": "Handles browser specific test actions."
+		},
+		"ete:": {
+			"name": "CLI Tests",
+			"kind": "library",
+			"summary": "A test component is a collection of verification code that exercises another part of the system from the outside. This one only contains CLI test files and a port helper, so it is about checking the command line area rather than shipping the command line itself.\n\nHolds packages/cli/test/app.test.ts and config.test.ts, with the freePort helper used by those tests.\n\nTest code that runs under the test runner.\n\nUses the CLI test files and the freePort helper; stands alone.",
+			"role": "Handles CLI behavior checks."
+		},
+		"folder:packages/cli": {
+			"name": "CLI Tests",
+			"kind": "gateway",
+			"summary": "A command line entry layer that prepares runtime configuration and exposes user facing commands. It sits above the core runner and browser driver and translates process inputs into library calls.\n\nProvides model creation, lazy resolver setup, app lifecycle helpers, config loading, the command program, and the run and report command implementations.\n\nRuns as a CLI process.\n\nCalls the core library for parsing and running tests, and uses the browser driver when commands need automation.",
+			"role": "Handles command line config and commands."
+		},
+		"ete:src ete:test": {
+			"name": "CLI Tests",
+			"kind": "library",
+			"summary": "A command line support area, combining startup control with configuration parsing for the CLI package.\n\nProvides the app handle and startup helpers alongside config schema, parsing, and loading utilities.\n\nRuns at test time and as a process helper.\n\nThe app controller uses the config parser, and the CLI tests exercise both.",
+			"role": "Handles app startup and config loading."
+		},
+		"ete:src ete:src/commands ete:test": {
+			"name": "CLI Tests",
+			"kind": "gateway",
+			"summary": "A command line entry layer that prepares runtime configuration and exposes user facing commands. It sits above the core runner and browser driver and translates process inputs into library calls.\n\nProvides model creation, lazy resolver setup, app lifecycle helpers, config loading, the command program, and the run and report command implementations.\n\nRuns as a CLI process.\n\nCalls the core library for parsing and running tests, and uses the browser driver when commands need automation.",
+			"role": "Handles command line config and commands."
 		}
 	}
 }
