@@ -194,7 +194,8 @@ h2{font-size:16px;margin:0 0 12px;display:flex;gap:8px;align-items:center;flex-w
 h2 small{color:#666;font-weight:normal;font-size:12px}
 .flow{font-size:11px;background:#eef2ff;color:#3730a3;border-radius:999px;padding:2px 8px;font-weight:500}
 .warn{color:#92400e}
-section.test{background:#fff;border:1px solid #e5e5e5;border-radius:8px;padding:16px;margin-bottom:24px}
+section.test{background:#fff;border:1px solid #e5e5e5;border-radius:8px;padding:16px;margin-bottom:24px;scroll-margin-top:16px}
+section.test:target{box-shadow:0 0 0 2px #111}
 video{width:100%;max-height:420px;background:#000;border-radius:6px;display:block}
 .rail{position:relative;height:22px;margin:6px 0 12px;background:#f0f0f0;border-radius:4px}
 .playhead{position:absolute;top:0;bottom:0;width:2px;background:#111;left:0;pointer-events:none}
@@ -308,7 +309,7 @@ export function summarySection(reports: Report[], opts: RenderOptions): string {
         ? `<div class="fail-detail">step ${step.index}: ${step.kind === 'expect' ? 'expect ' : ''}${esc(step.text)}${step.error ? ` <span class="error-inline">${esc(step.error.split('\\n')[0]!)}</span>` : ''}</div>`
         : '';
       const meta = `${(r.durationMs / 1000).toFixed(1)}s${r.anomalyCount ? ` · <span class="warn">⚠ ${r.anomalyCount}</span>` : ''}`;
-      return `<li class="trow ${r.status}"><span class="mark">${r.status === 'passed' ? '✅' : '❌'}</span><span class="tname"><a href="#play=${esc(dir)}">${esc(r.name)}</a>${detail}</span><span class="tmeta muted">${meta}</span></li>`;
+      return `<li class="trow ${r.status}"><span class="mark">${r.status === 'passed' ? '✅' : '❌'}</span><span class="tname"><a href="#${esc(dir)}">${esc(r.name)}</a>${detail}</span><span class="tmeta muted">${meta}</span></li>`;
     })
     .join('');
 

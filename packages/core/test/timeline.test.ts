@@ -109,7 +109,7 @@ describe('summary at the top of the report', () => {
     expect(html).toMatch(/<div class="summary">[\s\S]*2 of 3 passed[\s\S]*1 failed[\s\S]*5 anomalies/);
   });
   it('lists every test by name with its result, failures first, each linking into the player', () => {
-    const rows = [...html.matchAll(/<li class="trow (passed|failed)">[\s\S]*?<a href="#play=([^"]+)">([^<]+)<\/a>/g)].map((m) => [m[1], m[2], m[3]]);
+    const rows = [...html.matchAll(/<li class="trow (passed|failed)">[\s\S]*?<a href="#([^"]+)">([^<]+)<\/a>/g)].map((m) => [m[1], m[2], m[3]]);
     expect(rows).toEqual([['failed', 'pay', 'Checkout'], ['passed', 'sign-in', 'Sign in'], ['passed', 'sign-out', 'Sign out']]);
     expect(html).toMatch(/<li class="trow failed">[\s\S]*?step 3: expect shows Order confirmed[\s\S]*?Assertion failed/);
     expect(html).not.toMatch(/class="flow-row"/);

@@ -21,7 +21,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ owner: string; re
     runId: r.runId, passed: r.totals.passed, tests: r.totals.tests, publishedAt: r.publishedAt,
     url: `/${owner}/${repo}/${ref}/${r.path.split('/').pop()}`, current: r === latest,
   }));
-  const summary = latest ? summarySection(latestReports, { history }).replace(/href="#play=([^"]+)"/g, `href="/${owner}/${repo}/${ref}/${latest.path.split('/').pop()}/#play=$1"`) : '';
+  const summary = latest ? summarySection(latestReports, { history }).replace(/href="#([^"]+)"/g, `href="/${owner}/${repo}/${ref}/${latest.path.split('/').pop()}/#$1"`) : '';
   const body = `<style>${SUMMARY_CSS}</style><h1>${esc(label)}</h1><p class="muted">${esc(owner)}/${esc(repo)} · ${runs.length} runs · latest run ${latest ? esc(latest.runId) : ''}</p>${summary}${runsTable(runs, `/${owner}/${repo}`)}`;
   return html(layout(label, [{ label: 'ete', href: '/' }, { label: `${owner}/${repo}`, href: `/${owner}/${repo}` }, { label }], body));
 }
