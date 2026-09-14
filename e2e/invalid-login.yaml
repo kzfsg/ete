@@ -1,0 +1,7 @@
+name: Invalid login shows an error
+steps:
+  - go to /login.html
+  - type "bob@example.com" into the email field
+  - type "wrong" into the password field
+  - press Enter
+  - expect: the page shows "Invalid credentials"

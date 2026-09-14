@@ -1,0 +1,10 @@
+# Dogfood config: runs this repo's e2e/ tests against fixtures/demo-app.
+url: http://localhost:3210
+start: node fixtures/demo-app/server.mjs
+readyTimeout: 30000
+llm:
+  provider: anthropic
+  model: claude-opus-5
+heal:
+  maxPerRun: 5
+  maxPerStep: 2

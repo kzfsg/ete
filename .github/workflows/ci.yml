@@ -1,0 +1,20 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm i -g pnpm@11
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter '@ete/core' --filter '@ete/driver-browser' --filter 'ete' build
+      - run: cd packages/driver-browser && npx playwright install --with-deps chromium
+      - run: pnpm -r typecheck
+      - run: pnpm -r test

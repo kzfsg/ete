@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "steps": {
+    "5838238bdc3155bc0830cebd7ba32a584d815f90f3895814fcfaf1e314ddedef": {
+      "kind": "navigate",
+      "url": "/login.html"
+    },
+    "1a17421cbb6d45f4fee7111ea67386e3f95571d7e6259929380825ea73a098aa": {
+      "kind": "type",
+      "target": {
+        "selector": "css=input[name=email]"
+      },
+      "text": "alice@example.com"
+    },
+    "32de82939a8395a5f7e27d90e8b53f45be1577f7f97fd8fb0b150731a9da3b73": {
+      "kind": "type",
+      "target": {
+        "selector": "label=Password"
+      },
+      "text": "hunter2"
+    },
+    "76f158f4172484acdc9e9bbe15d0c24dd29f63cedfca099e7dfdcdf2ca1c00f1": {
+      "kind": "click",
+      "target": {
+        "selector": "role=button[name=\"Sign in\"]"
+      }
+    },
+    "df84513fedcdff857ad1277c764bba11c3057cb662869261d6112719e42efbb8": {
+      "kind": "textVisible",
+      "text": "Welcome, Alice"
+    },
+    "25916c374add93c18ced1f296a3451dc58ba7dd66701bea8d84fd4ef28516ab5": {
+      "kind": "urlMatches",
+      "pattern": "/dashboard\\.html$"
+    }
+  }
+}

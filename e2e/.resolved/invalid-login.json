@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "steps": {
+    "5838238bdc3155bc0830cebd7ba32a584d815f90f3895814fcfaf1e314ddedef": {
+      "kind": "navigate",
+      "url": "/login.html"
+    },
+    "82354b9a6bc4a5e126bb578d2613325fba578904a344392a59d3728ba3c6e056": {
+      "kind": "type",
+      "target": {
+        "selector": "css=input[name=email]"
+      },
+      "text": "bob@example.com"
+    },
+    "89055be5bec5025bcf0815099dd360b850fb2e5ec01965665106aec6db52218c": {
+      "kind": "type",
+      "target": {
+        "selector": "label=Password"
+      },
+      "text": "wrong"
+    },
+    "089828e2d93e3ec163ef8ed26b52e510c4eabe756bb03d208ffe2d7d5485ae8a": {
+      "kind": "press",
+      "key": "Enter"
+    },
+    "59f98a732b39669e7fd26084ed1d64e5e15951795e61eb755403c5eaf9551e45": {
+      "kind": "textVisible",
+      "text": "Invalid credentials"
+    }
+  }
+}

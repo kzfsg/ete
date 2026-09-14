@@ -1,0 +1,8 @@
+name: Login flow
+steps:
+  - go to /login.html
+  - type "alice@example.com" into the email field
+  - type "hunter2" into the password field
+  - click Sign in
+  - expect: the page shows "Welcome, Alice"
+  - expect: the URL ends with /dashboard.html

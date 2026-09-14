@@ -1,0 +1,20 @@
+name: ete self-test
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      # Runs this repo's own e2e/ tests against the demo fixture through the action.
+      # e2e/.resolved/ is committed, so no API key is needed for a green run.
+      - uses: ./packages/action
+        with:
+          url: http://localhost:3210
+          start: node fixtures/demo-app/server.mjs
