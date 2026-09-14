@@ -44,6 +44,10 @@ inputs:
     description: "Prune this repository's published runs older than this many days"
     required: false
     default: '30'
+  keep-runs:
+    description: 'Keep at most this many published runs per PR/branch (recordings are large)'
+    required: false
+    default: '5'
   workers:
     description: 'Replay this many tests at once (tests must not share app state)'
     required: false
@@ -116,7 +120,7 @@ runs:
       env:
         BLOB_READ_WRITE_TOKEN: ${{ inputs.blob-token }}
         ETE_SITE_URL: ${{ inputs.site-url }}
-      run: node "$ETE_BIN" publish --retention-days "${{ inputs.retention-days }}" ${{ inputs.shard != '' && format('--part "{0}"', inputs.shard) || '' }}
+      run: node "$ETE_BIN" publish --retention-days "${{ inputs.retention-days }}" --keep "${{ inputs.keep-runs }}" ${{ inputs.shard != '' && format('--part "{0}"', inputs.shard) || '' }}
 
     - name: Comment on PR
       if: always() && inputs.comment == 'true' && github.event_name == 'pull_request'

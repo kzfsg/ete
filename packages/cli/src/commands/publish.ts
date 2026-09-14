@@ -64,6 +64,8 @@ export type PublishOptions = {
   /** Name of this publisher's slice of the run (e.g. a CI shard). Parts never overwrite each other. */
   part?: string;
   retentionDays?: number;
+  /** Keep at most this many runs per ref (PR/branch); older ones are pruned regardless of age. Default 5. */
+  keepPerRef?: number;
   now?: Date;
   log?: (line: string) => void;
 };
@@ -120,12 +122,18 @@ export async function publishRun(o: PublishOptions): Promise<PublishResult> {
   uploaded++;
   const manifestUrl = `${runUrl(o.siteUrl, o)}/manifest.json`;
 
-  const pruned = await prune(o.blob, `runs/${slug(o.owner)}/${slug(o.repo)}/`, (o.retentionDays ?? 30) * 86_400_000, now, log);
+  const pruned = await prune(o.blob, `runs/${slug(o.owner)}/${slug(o.repo)}/`, (o.retentionDays ?? 30) * 86_400_000, now, log, { keepPerRef: o.keepPerRef ?? 5, currentRun: prefix });
   return { url: runUrl(o.siteUrl, o), prefix, manifest, manifestUrl, uploaded, pruned };
 }
 
-/** Deletes runs under `repoPrefix` whose manifest is older than `maxAgeMs`. */
-export async function prune(blob: BlobClient, repoPrefix: string, maxAgeMs: number, now: Date, log: (l: string) => void): Promise<number> {
+/**
+ * Deletes runs under `repoPrefix` that are older than `maxAgeMs`, or beyond the newest
+ * `keepPerRef` runs of their ref. Recordings are large; storage is the real limit.
+ */
+export async function prune(
+  blob: BlobClient, repoPrefix: string, maxAgeMs: number, now: Date, log: (l: string) => void,
+  o: { keepPerRef?: number; currentRun?: string } = {},
+): Promise<number> {
   let pruned = 0;
   let cursor: string | undefined;
   const manifests: { pathname: string; url: string }[] = [];
@@ -146,8 +154,24 @@ export async function prune(blob: BlobClient, repoPrefix: string, maxAgeMs: numb
     }
     runs.set(runDir, Math.max(runs.get(runDir) ?? 0, publishedAt));
   }
+  // Per-ref cap: rank runs of each ref newest-first; anything past keepPerRef goes.
+  const overCap = new Set<string>();
+  if (o.keepPerRef && o.keepPerRef > 0) {
+    const byRef = new Map<string, { runDir: string; at: number }[]>();
+    for (const [runDir, at] of runs) {
+      const ref = runDir.split('/').slice(0, 4).join('/');
+      if (!byRef.has(ref)) byRef.set(ref, []);
+      byRef.get(ref)!.push({ runDir, at: runDir === o.currentRun ? Number.POSITIVE_INFINITY : at });
+    }
+    for (const list of byRef.values()) {
+      list.sort((a, b) => b.at - a.at);
+      for (const r of list.slice(o.keepPerRef)) overCap.add(r.runDir);
+    }
+  }
   for (const [runDir, publishedAt] of runs) {
-    if (!publishedAt || now.getTime() - publishedAt < maxAgeMs) continue;
+    if (runDir === o.currentRun) continue;
+    const tooOld = publishedAt > 0 && now.getTime() - publishedAt >= maxAgeMs;
+    if (!tooOld && !overCap.has(runDir)) continue;
     const files: string[] = [];
     let c: string | undefined;
     do {
@@ -163,7 +187,7 @@ export async function prune(blob: BlobClient, repoPrefix: string, maxAgeMs: numb
 }
 
 export type PublishCommandOptions = {
-  cwd: string; repo?: string; pr?: number; branch?: string; run?: string; part?: string; attempt?: string; commit?: string; site?: string; token?: string; retentionDays?: number; log?: (l: string) => void;
+  cwd: string; repo?: string; pr?: number; branch?: string; run?: string; part?: string; attempt?: string; commit?: string; site?: string; token?: string; retentionDays?: number; keepPerRef?: number; log?: (l: string) => void;
 };
 
 /** CLI entry: fills defaults from git and GitHub Actions env, then publishes. */
@@ -182,7 +206,7 @@ export async function publishCommand(o: PublishCommandOptions): Promise<PublishR
   const runId = o.run ?? env.GITHUB_RUN_ID ?? `local-${Date.now()}`;
   return publishRun({
     cwd: o.cwd, blob: createBlobClient(token), owner, repo, ref, runId, attempt: o.attempt ?? env.GITHUB_RUN_ATTEMPT, commit: o.commit ?? env.GITHUB_SHA ?? (await gitSha(o.cwd)),
-    branch, source: env.GITHUB_ACTIONS ? 'ci' : 'local', siteUrl: site, part: o.part, retentionDays: o.retentionDays, log: o.log,
+    branch, source: env.GITHUB_ACTIONS ? 'ci' : 'local', siteUrl: site, part: o.part, retentionDays: o.retentionDays, keepPerRef: o.keepPerRef, log: o.log,
   });
 }
 

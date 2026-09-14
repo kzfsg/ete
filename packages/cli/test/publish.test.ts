@@ -114,3 +114,24 @@ describe('publishRun parts (sharded runs)', () => {
     expect(out.manifestUrl).toBe('https://s/acme/shop/pr-5/42/manifest.json');
   });
 });
+
+describe('publishRun keeps only the newest N runs per ref', () => {
+  it('prunes older runs of the same ref beyond keepPerRef, regardless of age', async () => {
+    const cwd = await results();
+    const day = (n: number) => new Date(Date.UTC(2026, 8, n)).toISOString();
+    const { client, deleted } = fakeBlob({
+      'runs/acme/shop/pr-5/r1/manifests/all.json': JSON.stringify({ publishedAt: day(10) }),
+      'runs/acme/shop/pr-5/r1/t/video.webm': 'v',
+      'runs/acme/shop/pr-5/r2/manifests/all.json': JSON.stringify({ publishedAt: day(11) }),
+      'runs/acme/shop/pr-5/r3/manifests/all.json': JSON.stringify({ publishedAt: day(12) }),
+      'runs/acme/shop/pr-6/other/manifests/all.json': JSON.stringify({ publishedAt: day(1) }),
+    });
+    const out = await publishRun({ cwd, blob: client, owner: 'acme', repo: 'shop', ref: { kind: 'pr', number: 5 }, runId: 'r4', source: 'ci', siteUrl: 'https://s', retentionDays: 365, keepPerRef: 2, now: new Date(day(14)) });
+    // r4 (new) + r3 kept; r1 and r2 pruned; pr-6 untouched by the per-ref rule
+    expect(out.pruned).toBe(2);
+    expect(deleted.some((k) => k.startsWith('runs/acme/shop/pr-5/r1/'))).toBe(true);
+    expect(deleted.some((k) => k.startsWith('runs/acme/shop/pr-5/r2/'))).toBe(true);
+    expect(deleted.some((k) => k.startsWith('runs/acme/shop/pr-5/r3/'))).toBe(false);
+    expect(deleted.some((k) => k.startsWith('runs/acme/shop/pr-6/'))).toBe(false);
+  });
+});
