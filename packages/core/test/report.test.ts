@@ -6,18 +6,18 @@ import { writeReport, renderHtml, collectReports } from '../src/report.js';
 import type { Report } from '../src/schema.js';
 
 const passed: Report = {
-  name: 'Login flow', file: 'e2e/login.yaml', status: 'passed', durationMs: 1200,
+  name: 'Login flow', file: 'e2e/login.yaml', flow: 'Login', mode: 'replay', status: 'passed', durationMs: 1200, anomalyCount: 0,
   recording: { videoPath: 'video.webm', tracePath: 'trace.zip' },
   steps: [
-    { index: 1, text: 'go to /login', kind: 'action', status: 'passed', durationMs: 300, screenshot: 'steps/01.png' },
-    { index: 2, text: 'click Sign in', kind: 'action', status: 'healed', durationMs: 900, screenshot: 'steps/02.png' },
+    { index: 1, text: 'go to /login', kind: 'action', status: 'passed', durationMs: 300, screenshot: 'steps/01.png', anomalies: [] },
+    { index: 2, text: 'click Sign in', kind: 'action', status: 'healed', durationMs: 900, screenshot: 'steps/02.png', anomalies: [] },
   ],
 };
 const failed: Report = {
-  name: 'Checkout', file: 'e2e/checkout.yaml', status: 'failed', durationMs: 500, recording: {},
+  name: 'Checkout', file: 'e2e/checkout.yaml', flow: 'Checkout', mode: 'replay', status: 'failed', durationMs: 500, anomalyCount: 0, recording: {},
   steps: [
-    { index: 1, text: 'click Buy <now>', kind: 'action', status: 'failed', durationMs: 500, screenshot: 'steps/01.png', error: 'Timeout 5000ms' },
-    { index: 2, text: 'expect receipt', kind: 'expect', status: 'skipped', durationMs: 0 },
+    { index: 1, text: 'click Buy <now>', kind: 'action', status: 'failed', durationMs: 500, screenshot: 'steps/01.png', error: 'Timeout 5000ms', anomalies: [] },
+    { index: 2, text: 'expect receipt', kind: 'expect', status: 'skipped', durationMs: 0, anomalies: [] },
   ],
 };
 

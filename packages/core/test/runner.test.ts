@@ -161,3 +161,32 @@ describe('runTest', () => {
     expect(report.steps[0].error).toMatch(/ANTHROPIC_API_KEY/);
   });
 });
+
+describe('runTest telemetry', () => {
+  it('records start/end and anomalies per executed step, none for skipped', async () => {
+    const driver = new FakeDriver();
+    driver.failOn.add('text=Nope');
+    driver.anomalyQueue = [[{ t: 5, kind: 'console-error', message: 'boom' }], []];
+    const stale: ResolvedEntry = { kind: 'click', target: { selector: 'text=Nope' } };
+    const o = await opts({
+      test: test([{ kind: 'action', text: 'click Sign in' }, { kind: 'action', text: 'then fail' }, { kind: 'action', text: 'never' }]),
+      driver, resolved: resolvedWith({ 'click Sign in': clickSignIn, 'then fail': stale, never: clickSignIn }), heal: { maxPerRun: 0, maxPerStep: 0 },
+    });
+    const { report } = await runTest(o);
+    expect(driver.stepLabels).toEqual(['click Sign in', 'then fail']);
+    expect(report.steps[0]).toMatchObject({ status: 'passed', startMs: 10, endMs: 110, anomalies: [{ kind: 'console-error', message: 'boom', t: 5 }] });
+    expect(report.steps[1]).toMatchObject({ status: 'failed', startMs: 120, endMs: 220, anomalies: [] });
+    expect(report.steps[2].startMs).toBeUndefined();
+    expect(report.steps[2].anomalies).toEqual([]);
+    expect(report.anomalyCount).toBe(1);
+    expect(report.mode).toBe('replay');
+    expect(report.flow).toBe('General');
+  });
+  it('derives the flow from the path or the declared field', async () => {
+    const driver = new FakeDriver();
+    const o = await opts({ testPath: 'e2e/checkout/pay.yaml', test: test([{ kind: 'action', text: 'click Sign in' }]), driver, resolved: resolvedWith({ 'click Sign in': clickSignIn }) });
+    expect((await runTest(o)).report.flow).toBe('Checkout');
+    const o2 = await opts({ testPath: 'e2e/checkout/pay.yaml', test: { ...test([{ kind: 'action', text: 'click Sign in' }]), flow: 'Buying' }, driver: new FakeDriver(), resolved: resolvedWith({ 'click Sign in': clickSignIn }) });
+    expect((await runTest(o2)).report.flow).toBe('Buying');
+  });
+});

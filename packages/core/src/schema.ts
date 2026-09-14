@@ -30,16 +30,18 @@ export type Step = { kind: 'action'; text: string } | { kind: 'expect'; text: st
 const RawStep = z.union([z.string().min(1), z.object({ expect: z.string().min(1) }).strict()]);
 const RawTestFile = z.object({
   name: z.string().min(1),
+  flow: z.string().min(1).optional(),
   target: z.enum(['browser', 'desktop']).default('browser'),
   steps: z.array(RawStep).min(1),
 });
 
-export type TestFile = { name: string; target: 'browser' | 'desktop'; steps: Step[] };
+export type TestFile = { name: string; flow?: string; target: 'browser' | 'desktop'; steps: Step[] };
 
 export function parseTestFile(yamlText: string): TestFile {
   const raw = RawTestFile.parse(YAML.parse(yamlText));
   return {
     name: raw.name,
+    ...(raw.flow ? { flow: raw.flow } : {}),
     target: raw.target,
     steps: raw.steps.map((s): Step =>
       typeof s === 'string' ? { kind: 'action', text: s } : { kind: 'expect', text: s.expect },
@@ -48,7 +50,16 @@ export function parseTestFile(yamlText: string): TestFile {
 }
 
 export type Observation = { screenshotPng: Buffer; a11yTree?: string; url?: string };
-export type Recording = { videoPath?: string; tracePath?: string };
+export type Recording = { videoPath?: string; tracePath?: string; filmstripPath?: string };
+
+export type AnomalyKind = 'console-error' | 'page-error' | 'request-failed' | 'http-error' | 'dialog';
+export type Anomaly = {
+  /** ms since recording start */
+  t: number;
+  kind: AnomalyKind;
+  message: string;
+};
+export type StepTelemetry = { startMs: number; endMs: number; anomalies: Anomaly[] };
 export type StepStatus = 'passed' | 'resolved' | 'healed' | 'failed' | 'skipped';
 export type StepReport = {
   index: number;
@@ -60,11 +71,18 @@ export type StepReport = {
   error?: string;
   healedFrom?: ResolvedEntry;
   entry?: ResolvedEntry;
+  /** ms since recording start; absent for skipped steps */
+  startMs?: number;
+  endMs?: number;
+  anomalies: Anomaly[];
 };
 export type Report = {
   name: string;
   file: string;
+  flow: string;
+  mode: 'replay' | 'explore';
   status: 'passed' | 'failed';
+  anomalyCount: number;
   durationMs: number;
   steps: StepReport[];
   recording: Recording;
