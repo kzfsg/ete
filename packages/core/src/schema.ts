@@ -102,6 +102,8 @@ export type RunManifest = {
   totals: { tests: number; passed: number; anomalies: number };
   tests: Array<{
     dir: string;
+    /** Test file path in the repo, for the fix command. */
+    file?: string;
     name: string;
     flow: string;
     status: 'passed' | 'failed';

@@ -118,7 +118,7 @@ program
   .action(async (o) => {
     const r = await publishCommand({ cwd: process.cwd(), site: o.site, repo: o.repo, pr: o.pr, branch: o.branch, run: o.run, retentionDays: o.retentionDays, log: (l) => console.log(l) });
     console.log(`\nPublished ${r.uploaded} files${r.pruned ? `, pruned ${r.pruned} old run(s)` : ''}.\n${r.url}`);
-    if (process.env.GITHUB_ENV) await (await import('node:fs/promises')).appendFile(process.env.GITHUB_ENV, `REPORT_URL=${r.url}\n`);
+    if (process.env.GITHUB_ENV) await (await import('node:fs/promises')).appendFile(process.env.GITHUB_ENV, `REPORT_URL=${r.url}\nMANIFEST_URL=${r.manifestUrl}\n`);
   });
 
 program.parseAsync().catch((err: unknown) => {

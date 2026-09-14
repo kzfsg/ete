@@ -83,6 +83,7 @@ describe('publishRun', () => {
     });
     expect(manifest.tests[0].blobs.screenshots['steps/01.png']).toBe('https://blob.test/runs/acme/shop/pr-5/42/sign-in/steps/01.png');
     expect(out.manifest).toEqual(manifest);
+    expect(out.manifestUrl).toBe('https://blob.test/runs/acme/shop/pr-5/42/manifest.json');
   });
 
   it('prunes runs older than the retention window for the same repo only', async () => {

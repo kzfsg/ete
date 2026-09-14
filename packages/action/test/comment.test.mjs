@@ -75,3 +75,46 @@ test('large suites: failures first, passing flows collapsed, headline still comp
 test('small suites are not collapsed', () => {
   assert.doesNotMatch(buildComment([login, wrongPw, pay], hosted), /passing flows/);
 });
+
+test('builds from a merged run manifest when shards publish separately', async () => {
+  const { reportsFromManifest } = await import('../scripts/comment.mjs');
+  const manifest = {
+    version: 1, owner: 'acme', repo: 'shop', ref: { kind: 'pr', number: 5 }, runId: '42', publishedAt: '2026-09-14T22:00:00Z', source: 'ci',
+    totals: { tests: 2, passed: 1, anomalies: 1 },
+    tests: [
+      { dir: 'sign-in', file: 'e2e/login/sign-in.yaml', name: 'Sign in', flow: 'Login', status: 'passed', durationMs: 3100, anomalyCount: 1, steps: 2, blobs: { report: 'https://b/r', trace: 'https://b/sign-in/trace.zip', screenshots: {} } },
+      { dir: 'pay', file: 'e2e/checkout/pay.yaml', name: 'Pay', flow: 'Checkout', status: 'failed', durationMs: 700, anomalyCount: 0, steps: 3,
+        failedStep: { index: 2, text: 'shows Order confirmed', error: 'Assertion failed', screenshot: 'https://b/pay/steps/02.png' },
+        blobs: { report: 'https://b/r2', trace: 'https://b/pay/trace.zip', screenshots: {} } },
+    ],
+  };
+  const reports = reportsFromManifest(manifest);
+  const md = buildComment(reports, { artifactUrl: 'x', reportUrl: 'https://ete-reports.vercel.app/acme/shop/pr-5/42' });
+  assert.match(md, /\*\*1\/2 passed · 1 anomaly\*\*/);
+  assert.match(md, /❌ Pay · 0\.7s.*\[▶ play\]\(https:\/\/ete-reports\.vercel\.app\/acme\/shop\/pr-5\/42\/#play=pay\) · \[trace\]\(https:\/\/trace\.playwright\.dev\/\?trace=https:\/\/b\/pay\/trace\.zip\)/);
+  assert.match(md, /- step 2: shows Order confirmed · Assertion failed/);
+  assert.match(md, /- fix: `ete session start --from e2e\/checkout\/pay\.yaml --at 2`/);
+  assert.match(md, /!\[step 2\]\(https:\/\/b\/pay\/steps\/02\.png\)/);
+  assert.match(md, /✅ Sign in · 3\.1s · ⚠️ 1 anomaly/);
+});
+
+test('builds from a merged run manifest when shards publish separately', async () => {
+  const { reportsFromManifest } = await import('../scripts/comment.mjs');
+  const manifest = {
+    version: 1, owner: 'acme', repo: 'shop', ref: { kind: 'pr', number: 5 }, runId: '42', publishedAt: '2026-09-14T22:00:00Z', source: 'ci',
+    totals: { tests: 2, passed: 1, anomalies: 1 },
+    tests: [
+      { dir: 'sign-in', name: 'Sign in', flow: 'Login', status: 'passed', durationMs: 3100, anomalyCount: 1, steps: 2, blobs: { report: 'https://b/r', trace: 'https://b/sign-in/trace.zip', screenshots: {} } },
+      { dir: 'pay', name: 'Pay', flow: 'Checkout', status: 'failed', durationMs: 700, anomalyCount: 0, steps: 3,
+        failedStep: { index: 2, text: 'shows Order confirmed', error: 'Assertion failed', screenshot: 'https://b/pay/steps/02.png' },
+        blobs: { report: 'https://b/r2', trace: 'https://b/pay/trace.zip', screenshots: {} } },
+    ],
+  };
+  const reports = reportsFromManifest(manifest);
+  const md = buildComment(reports, { artifactUrl: 'x', reportUrl: 'https://ete-reports.vercel.app/acme/shop/pr-5/42' });
+  assert.match(md, /\*\*1\/2 passed · 1 anomaly\*\*/);
+  assert.match(md, /❌ Pay · 0\.7s.*\[▶ play\]\(https:\/\/ete-reports\.vercel\.app\/acme\/shop\/pr-5\/42\/#play=pay\) · \[trace\]\(https:\/\/trace\.playwright\.dev\/\?trace=https:\/\/b\/pay\/trace\.zip\)/);
+  assert.match(md, /- step 2: shows Order confirmed · Assertion failed/);
+  assert.match(md, /!\[step 2\]\(https:\/\/b\/pay\/steps\/02\.png\)/);
+  assert.match(md, /✅ Sign in · 3\.1s · ⚠️ 1 anomaly/);
+});

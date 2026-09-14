@@ -8,7 +8,19 @@ export const MARKER = '<!-- ete-report -->';
 const ICON = { passed: '✅', failed: '❌', skipped: '⏭️' };
 const secs = (ms) => `${(ms / 1000).toFixed(1)}s`;
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-const dirOf = (r) => parse(r.file).name;
+const dirOf = (r) => r.dir || parse(r.file).name;
+
+/**
+ * Turns a published run manifest (possibly merged from several shards) into the report shapes
+ * buildComment expects. Blob URLs are absolute, so links use them directly.
+ */
+export function reportsFromManifest(manifest) {
+  return (manifest.tests || []).map((t) => ({
+    name: t.name, file: t.file || `e2e/${t.dir}.yaml`, dir: t.dir, flow: t.flow, status: t.status, durationMs: t.durationMs, anomalyCount: t.anomalyCount,
+    recording: { tracePath: t.blobs?.trace ? 'trace.zip' : undefined, traceUrl: t.blobs?.trace },
+    steps: t.failedStep ? [{ index: t.failedStep.index, text: t.failedStep.text, kind: 'action', status: 'failed', error: t.failedStep.error, screenshotUrl: t.failedStep.screenshot, anomalies: [] }] : [],
+  }));
+}
 
 /**
  * @param {Array} reports
@@ -50,7 +62,8 @@ export function buildComment(reports, o) {
       const links = [];
       if (o.reportUrl) {
         links.push(`[▶ play](${o.reportUrl}/#play=${dir})`);
-        if (t.recording?.tracePath) links.push(`[trace](https://trace.playwright.dev/?trace=${o.reportUrl}/${dir}/${t.recording.tracePath})`);
+        const traceUrl = t.recording?.traceUrl || (t.recording?.tracePath ? `${o.reportUrl}/${dir}/${t.recording.tracePath}` : undefined);
+        if (traceUrl) links.push(`[trace](https://trace.playwright.dev/?trace=${traceUrl})`);
       }
       const warn = t.anomalyCount ? ` · ⚠️ ${plural(t.anomalyCount, 'anomaly', 'anomalies')}` : '';
       out.push(`${t.status === 'passed' ? '✅' : '❌'} ${t.name} · ${secs(t.durationMs)}${warn}${links.length ? `  ${links.join(' · ')}` : ''}`);
@@ -59,7 +72,8 @@ export function buildComment(reports, o) {
         const err = failed.error ? ` · ${failed.error.split('\n')[0]}` : '';
         out.push(`  - step ${failed.index}: ${failed.kind === 'expect' ? 'expect ' : ''}${failed.text}${err}`);
         out.push(`  - fix: \`ete session start --from ${t.file} --at ${failed.index}\``);
-        if (o.reportUrl && failed.screenshot) out.push('', `  ![step ${failed.index}](${o.reportUrl}/${dir}/${failed.screenshot})`, '');
+        const shot = failed.screenshotUrl || (o.reportUrl && failed.screenshot ? `${o.reportUrl}/${dir}/${failed.screenshot}` : undefined);
+        if (shot) out.push('', `  ![step ${failed.index}](${shot})`, '');
       }
     }
     return out;
@@ -113,7 +127,16 @@ export async function main(env = process.env) {
   const pr = env.PR_NUMBER;
   if (!token || !repo || !pr) throw new Error('GITHUB_TOKEN, GITHUB_REPOSITORY and PR_NUMBER are required');
   const artifactUrl = env.ARTIFACT_URL || `${env.GITHUB_SERVER_URL ?? 'https://github.com'}/${repo}/actions/runs/${env.GITHUB_RUN_ID}`;
-  const body = buildComment(await collect(env.RESULTS_DIR || 'ete-results'), {
+  // Sharded runs: the merged manifest on the site has every shard's tests; local results have only ours.
+  let reports = await collect(env.RESULTS_DIR || 'ete-results');
+  if (env.MANIFEST_URL) {
+    try {
+      reports = reportsFromManifest(await (await fetch(env.MANIFEST_URL, { cache: 'no-store' })).json());
+    } catch (err) {
+      console.warn(`could not read merged manifest (${err.message}); using local results`);
+    }
+  }
+  const body = buildComment(reports, {
     artifactUrl,
     reportUrl: env.REPORT_URL || undefined,
     run: { id: env.GITHUB_RUN_ID, attempt: env.GITHUB_RUN_ATTEMPT, at: new Date().toISOString() },

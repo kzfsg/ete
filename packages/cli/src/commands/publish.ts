@@ -66,7 +66,7 @@ export type PublishOptions = {
   log?: (line: string) => void;
 };
 
-export type PublishResult = { url: string; prefix: string; manifest: RunManifest; uploaded: number; pruned: number };
+export type PublishResult = { url: string; prefix: string; manifest: RunManifest; manifestUrl: string; uploaded: number; pruned: number };
 
 export async function publishRun(o: PublishOptions): Promise<PublishResult> {
   const log = o.log ?? (() => {});
@@ -93,7 +93,7 @@ export async function publishRun(o: PublishOptions): Promise<PublishResult> {
     const screenshots: Record<string, string> = {};
     for (const s of r.steps) if (s.screenshot && urls.has(s.screenshot)) screenshots[s.screenshot] = urls.get(s.screenshot)!;
     tests.push({
-      dir, name: r.name, flow: r.flow, status: r.status, durationMs: r.durationMs, anomalyCount: r.anomalyCount, steps: r.steps.length,
+      dir, file: r.file, name: r.name, flow: r.flow, status: r.status, durationMs: r.durationMs, anomalyCount: r.anomalyCount, steps: r.steps.length,
       ...(failed ? { failedStep: { index: failed.index, text: failed.text, error: failed.error, screenshot: failed.screenshot ? urls.get(failed.screenshot) : undefined } } : {}),
       blobs: {
         report: urls.get('report.json')!,
@@ -118,11 +118,11 @@ export async function publishRun(o: PublishOptions): Promise<PublishResult> {
     totals: { tests: allTests.length, passed: allTests.filter((t) => t.status === 'passed').length, anomalies: allTests.reduce((n, t) => n + t.anomalyCount, 0) },
     tests: allTests,
   };
-  await o.blob.put(`${prefix}manifest.json`, JSON.stringify(manifest, null, 2), { contentType: 'application/json' });
+  const { url: manifestUrl } = await o.blob.put(`${prefix}manifest.json`, JSON.stringify(manifest, null, 2), { contentType: 'application/json' });
   uploaded++;
 
   const pruned = await prune(o.blob, `runs/${slug(o.owner)}/${slug(o.repo)}/`, (o.retentionDays ?? 30) * 86_400_000, now, log);
-  return { url: runUrl(o.siteUrl, o), prefix, manifest, uploaded, pruned };
+  return { url: runUrl(o.siteUrl, o), prefix, manifest, manifestUrl, uploaded, pruned };
 }
 
 async function readManifest(blob: BlobClient, pathname: string): Promise<RunManifest | undefined> {
