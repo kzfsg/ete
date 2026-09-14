@@ -96,11 +96,23 @@ runs:
         if-no-files-found: ignore
         retention-days: 14
 
-    - name: Render timeline
+    - name: Render report
       if: always()
       shell: bash
       working-directory: ${{ inputs.working-directory }}
-      run: node "$ETE_BIN" report --no-open || true
+      run: |
+        TITLE="${{ github.repository }} · ${{ github.event_name == 'pull_request' && format('PR #{0}', github.event.pull_request.number) || github.ref_name }} · run ${{ github.run_id }}"
+        node "$ETE_BIN" report --no-open --standalone --title "$TITLE" || true
+
+    - name: Upload self-contained report
+      id: report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ete-report-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ inputs.working-directory }}/ete-results/ete-report.html
+        if-no-files-found: ignore
+        retention-days: 14
 
     - name: Publish recordings to media branch
       id: publish
@@ -122,6 +134,7 @@ runs:
         GITHUB_TOKEN: ${{ github.token }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
         ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        REPORT_URL: ${{ steps.report.outputs.artifact-url }}
         # MEDIA_BASE / TIMELINE_URL are exported by publish.mjs via GITHUB_ENV
       run: node "${{ github.action_path }}/scripts/comment.mjs"
 

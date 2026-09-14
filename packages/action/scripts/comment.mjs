@@ -35,7 +35,7 @@ function fixHint(r) {
 
 /**
  * @param {Array} reports
- * @param {{artifactUrl: string, mediaBase?: string, timelineUrl?: string}} o
+ * @param {{artifactUrl: string, reportUrl?: string, mediaBase?: string, timelineUrl?: string}} o
  */
 export function buildComment(reports, o) {
   const lines = [MARKER, '## 🧪 ete E2E results', ''];
@@ -77,6 +77,7 @@ export function buildComment(reports, o) {
     if (anomalyList.length > 30) lines.push(`- … and ${anomalyList.length - 30} more`);
     lines.push('', '</details>');
   }
+  if (o.reportUrl) lines.push('', `📊 **[Open the full report](${o.reportUrl})** — one HTML file with every recording playable and scrubbable by step. Download, unzip, open.`);
   lines.push('', `📦 [Download full videos & traces](${o.artifactUrl}) · view a trace with \`npx playwright show-trace <test>/trace.zip\`, or the whole run with \`npx ete report\`.`);
   return lines.join('\n');
 }
@@ -109,6 +110,7 @@ export async function main(env = process.env) {
   const artifactUrl = env.ARTIFACT_URL || `${env.GITHUB_SERVER_URL ?? 'https://github.com'}/${repo}/actions/runs/${env.GITHUB_RUN_ID}`;
   const body = buildComment(await collect(env.RESULTS_DIR || 'ete-results'), {
     artifactUrl,
+    reportUrl: env.REPORT_URL || undefined,
     mediaBase: env.MEDIA_BASE || undefined,
     timelineUrl: env.TIMELINE_URL || undefined,
   });

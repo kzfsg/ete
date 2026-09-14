@@ -92,11 +92,13 @@ session.command('abort').description('Discard the session and stop').action(asyn
 
 program
   .command('report')
-  .description('Render ete-results/ to a single HTML page and open it')
+  .description('Render ete-results/ to a timeline page and open it')
   .option('--no-open', 'do not open the browser')
+  .option('-s, --standalone [path]', 'also write one self-contained HTML file with videos and screenshots inlined (default: ete-results/ete-report.html)')
+  .option('-t, --title <title>', 'title shown in the report')
   .action(async (o) => {
-    const out = await reportCommand({ cwd: process.cwd(), open: o.open });
-    console.log(out);
+    const out = await reportCommand({ cwd: process.cwd(), open: o.open, standalone: o.standalone, title: o.title });
+    console.log(out.standalone ?? out.index);
   });
 
 program.parseAsync().catch((err: unknown) => {

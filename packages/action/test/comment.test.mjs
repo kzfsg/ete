@@ -70,6 +70,12 @@ test('image urls use the same-repo raw form so private repos render them', () =>
   assert.equal(imageUrl('https://cdn.example.com/media', 'x/preview.png'), 'https://cdn.example.com/media/x/preview.png');
 });
 
+test('links the self-contained report when available', () => {
+  const md = buildComment([login], { ...opts, reportUrl: 'https://example.com/report' });
+  assert.match(md, /📊 \*\*\[Open the full report\]\(https:\/\/example\.com\/report\)\*\*/);
+  assert.doesNotMatch(buildComment([login], opts), /Open the full report/);
+});
+
 test('handles no reports', () => {
   assert.match(buildComment([], { artifactUrl: 'x' }), /No test results/);
 });

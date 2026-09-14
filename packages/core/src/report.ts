@@ -76,8 +76,12 @@ function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
 
-function stepRow(dir: string, s: StepReport): string {
-  const img = s.screenshot ? `<img src="${esc(dir)}/${esc(s.screenshot)}" alt="step ${s.index}" loading="lazy">` : '';
+type AssetUrl = (dir: string, rel: string) => string | undefined;
+const relativeAsset: AssetUrl = (dir, rel) => `${esc(dir)}/${esc(rel)}`;
+
+function stepRow(dir: string, s: StepReport, asset: AssetUrl): string {
+  const shot = s.screenshot ? asset(dir, s.screenshot) : undefined;
+  const img = shot ? `<img src="${shot}" alt="step ${s.index}" loading="lazy">` : '';
   const err = s.error ? `<div class="error">${esc(s.error)}</div>` : '';
   const anomalies = s.anomalies.length
     ? `<ul class="anomalies">${s.anomalies.map((a) => `<li><span class="akind">${esc(a.kind)}</span> ${esc(a.message)} <span class="at">@${(a.t / 1000).toFixed(1)}s</span></li>`).join('')}</ul>`
@@ -104,14 +108,12 @@ function rail(report: Report): string {
   return `<div class="rail" data-total="${total}"><div class="playhead"></div>${items}</div>`;
 }
 
-function testSection(r: Report): string {
+function testSection(r: Report, asset: AssetUrl): string {
   const dir = resultsDirName(r.file);
-  const video = r.recording.videoPath
-    ? `<video controls preload="metadata" src="${esc(dir)}/${esc(r.recording.videoPath)}"></video>`
-    : '<p class="muted">No video recorded.</p>';
-  const filmstrip = r.recording.filmstripPath
-    ? `<img class="filmstrip" src="${esc(dir)}/${esc(r.recording.filmstripPath)}" alt="filmstrip">`
-    : '';
+  const videoSrc = r.recording.videoPath ? asset(dir, r.recording.videoPath) : undefined;
+  const video = videoSrc ? `<video controls preload="metadata" src="${videoSrc}"></video>` : '<p class="muted">No video recorded.</p>';
+  const filmstripSrc = r.recording.filmstripPath ? asset(dir, r.recording.filmstripPath) : undefined;
+  const filmstrip = filmstripSrc ? `<img class="filmstrip" src="${filmstripSrc}" alt="filmstrip">` : '';
   const trace = r.recording.tracePath
     ? `<p class="muted">Trace: <code>npx playwright show-trace ${esc(dir)}/${esc(r.recording.tracePath)}</code></p>`
     : '';
@@ -125,7 +127,7 @@ ${trace}
 <table>
 <thead><tr><th></th><th>#</th><th>Step</th><th>Status</th><th>Time</th></tr></thead>
 <tbody>
-${r.steps.map((s) => stepRow(dir, s)).join('\n')}
+${r.steps.map((s) => stepRow(dir, s, asset)).join('\n')}
 </tbody>
 </table>
 </section>`;
@@ -188,15 +190,51 @@ document.querySelectorAll('section.test').forEach(function (sec) {
 });
 `;
 
-export function renderHtml(reports: Report[]): string {
+function page(reports: Report[], asset: AssetUrl, title?: string): string {
   const passed = reports.filter((r) => r.status === 'passed').length;
   const anomalies = reports.reduce((n, r) => n + (r.anomalyCount ?? 0), 0);
+  const heading = `ete results · ${passed}/${reports.length} passed${anomalies ? ` · <span class="warn">${anomalies} anomalies</span>` : ''}`;
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>ete results</title><style>${CSS}</style></head>
+<html lang="en"><head><meta charset="utf-8"><title>${esc(title ?? 'ete results')}</title><style>${CSS}</style></head>
 <body>
-<h1>ete results · ${passed}/${reports.length} passed${anomalies ? ` · <span class="warn">${anomalies} anomalies</span>` : ''}</h1>
-${reports.map(testSection).join('\n')}
+<h1>${heading}${title ? ` <small class="muted">${esc(title)}</small>` : ''}</h1>
+${reports.map((r) => testSection(r, asset)).join('\n')}
 <script>${JS}</script>
 </body></html>
 `;
+}
+
+/** Report that references recordings as sibling files under the results root. */
+export function renderHtml(reports: Report[], title?: string): string {
+  return page(reports, relativeAsset, title);
+}
+
+const MIME: Record<string, string> = { '.png': 'image/png', '.webm': 'video/webm', '.mp4': 'video/mp4', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif' };
+
+/**
+ * A single self-contained file: every video, screenshot, and filmstrip is inlined as a data
+ * URI, so it opens from anywhere (artifact download, chat, email) with real video playback.
+ * Missing files degrade to "no video"/no image rather than failing.
+ */
+export async function renderStandaloneHtml(reports: Report[], root: string, opts: { title?: string } = {}): Promise<string> {
+  const cache = new Map<string, string | undefined>();
+  async function load(dir: string, rel: string): Promise<string | undefined> {
+    const key = `${dir}/${rel}`;
+    if (!cache.has(key)) {
+      try {
+        const buf = await readFile(join(root, dir, rel));
+        const ext = rel.slice(rel.lastIndexOf('.')).toLowerCase();
+        cache.set(key, `data:${MIME[ext] ?? 'application/octet-stream'};base64,${buf.toString('base64')}`);
+      } catch {
+        cache.set(key, undefined);
+      }
+    }
+    return cache.get(key);
+  }
+  // Pre-load everything so the synchronous renderer can look assets up.
+  for (const r of reports) {
+    const dir = resultsDirName(r.file);
+    for (const rel of [r.recording.videoPath, r.recording.filmstripPath, ...r.steps.map((s) => s.screenshot)]) if (rel) await load(dir, rel);
+  }
+  return page(reports, (dir, rel) => cache.get(`${dir}/${rel}`), opts.title);
 }
