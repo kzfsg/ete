@@ -31,7 +31,7 @@ inputs:
   node-version:
     description: 'Node version to use'
     required: false
-    default: '20'
+    default: '22'
   media-branch:
     description: 'Branch to publish recordings to so the PR comment can embed filmstrips and link traces. Empty disables publishing. Needs contents: write.'
     required: false
