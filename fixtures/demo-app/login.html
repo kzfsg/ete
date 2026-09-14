@@ -1,0 +1,18 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Log in</title></head>
+<body>
+<h1>Log in</h1>
+<form id="f">
+  <label>Email <input name="email" type="email" placeholder="Email"></label><br>
+  <label>Password <input name="password" type="password" placeholder="Password"></label><br>
+  <button type="submit">Sign in</button>
+</form>
+<div id="msg"></div>
+<script>
+document.getElementById('f').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const email = e.target.email.value;
+  if (email === 'alice@example.com') location.href = '/dashboard.html';
+  else document.getElementById('msg').innerHTML = '<p role="alert">Invalid credentials</p>';
+});
+</script>
+</body></html>

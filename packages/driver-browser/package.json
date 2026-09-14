@@ -1,5 +1,5 @@
 {
-  "name": "@ete/core",
+  "name": "@ete/driver-browser",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -13,9 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^4.0.53",
-    "ai": "^7.0.99",
-    "yaml": "^2.8.2",
-    "zod": "^4.6.4"
+    "@ete/core": "workspace:*",
+    "playwright": "^1.63.0"
   }
 }

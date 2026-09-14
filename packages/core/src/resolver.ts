@@ -26,6 +26,7 @@ You are given a screenshot, the page URL, and an accessibility tree of the curre
 Selectors are Playwright selector strings. Prefer, in order:
 - role=button[name="Sign in"]   (role + accessible name; most stable)
 - text=Welcome, Alice           (visible text)
+- label=Password                (form field by its label)
 - placeholder=Email             (input placeholder)
 - css=input[name=email]         (CSS, when nothing better exists)
 
