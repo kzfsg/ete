@@ -82,8 +82,9 @@ describe('player', () => {
     for (const cls of ['player-stage', 'player-reel', 'player-caption', 'player-rail']) expect(html).toContain(`class="${cls}"`);
     expect(html).toMatch(/<button class="open-player" data-dir="pay"/);
   });
-  it('opens straight into a test from the url hash', () => {
+  it('opens straight into a test from the url hash, and reacts to in-page hash changes', () => {
     expect(html).toContain("'#play='");
+    expect(html).toContain("addEventListener('hashchange'");
   });
   it('escapes data for safe embedding in a script tag', () => {
     const evil = { ...report, name: 'x</script><script>alert(1)</script>' };

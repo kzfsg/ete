@@ -447,8 +447,17 @@ const PLAYER_JS = `
   });
   root.querySelector('.player-close').addEventListener('click', close);
   document.querySelectorAll('.open-player').forEach(function (b) { b.addEventListener('click', function () { open(b.dataset.dir || tests[0].dir); }); });
-  var m = /[#&]play=([^&]+)/.exec(location.hash); if (m) open(decodeURIComponent(m[1]), false);
-  var m2 = /^#play=/.test(location.hash); void m2; // '#play=' is the deep link format
+  function openFromHash(autoplay) {
+    var m = /[#&]play=([^&]+)/.exec(location.hash);
+    if (!m) return false;
+    var dir = decodeURIComponent(m[1]);
+    if (root.hidden) open(dir, autoplay);
+    else { var i = tests.findIndex(function (t) { return t.dir === dir; }); if (i >= 0 && i !== cur) load(i, autoplay); }
+    return true;
+  }
+  // Deep link on load, and any in-page link to '#play=<test>' (e.g. the summary list).
+  openFromHash(false);
+  window.addEventListener('hashchange', function () { openFromHash(true); });
 })();
 `;
 
