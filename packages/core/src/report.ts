@@ -171,19 +171,12 @@ export const SUMMARY_CSS = `
 .headline{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px}
 .headline .big{font-size:22px;font-weight:600}
 .headline .stat{font-size:13px;color:#666}.headline .stat.bad{color:#991b1b}.headline .stat.warn{color:#92400e}
-.flows{display:grid;gap:6px;margin-bottom:12px}
-.flow-row{display:grid;grid-template-columns:160px 1fr 48px;align-items:center;gap:10px;font-size:13px}
-.flow-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bar{display:flex;gap:2px;height:18px}
-.seg{display:inline-flex;align-items:center;justify-content:center;font-size:11px;color:#fff;border-radius:3px;min-width:14px}
-.seg.passed{background:#16a34a}.seg.failed{background:#dc2626}
-.flow-count{text-align:right}
-.legend{display:flex;gap:14px;font-size:12px;color:#666;margin-top:4px}
-.legend .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
-.legend .sw.passed{background:#16a34a}.legend .sw.failed{background:#dc2626}
-.failures{list-style:none;padding:0;margin:0;border-top:1px solid #eee}
-.failures li{padding:8px 0;border-bottom:1px solid #eee;font-size:14px}
-.failures a{color:#1a1a1a;font-weight:500}
+.tests{list-style:none;padding:0;margin:0;border-top:1px solid #eee}
+.trow{display:grid;grid-template-columns:24px 1fr auto;gap:10px;align-items:start;padding:8px 0;border-bottom:1px solid #eee;font-size:14px}
+.trow .mark{line-height:1.4}
+.trow .tname a{color:#1a1a1a;text-decoration:none;font-weight:500}.trow .tname a:hover{text-decoration:underline}
+.trow.failed .tname a{color:#991b1b}
+.tmeta{white-space:nowrap;font-size:12px}
 .fail-detail{font-size:12px;color:#555;margin-top:2px}
 .error-inline{font-family:ui-monospace,monospace;color:#991b1b}
 .history{display:flex;align-items:flex-end;gap:3px;height:44px;margin-left:auto}
@@ -306,28 +299,16 @@ export function summarySection(reports: Report[], opts: RenderOptions): string {
   const passed = reports.filter((r) => r.status === 'passed').length;
   const failed = reports.length - passed;
   const anomalies = reports.reduce((n, r) => n + (r.anomalyCount ?? 0), 0);
-  const flows = new Map<string, Report[]>();
-  for (const r of reports) flows.set(r.flow, [...(flows.get(r.flow) ?? []), r]);
-  const maxPerFlow = Math.max(1, ...[...flows.values()].map((t) => t.length));
-
-  const rows = [...flows.entries()]
-    .sort((a, b) => Number(b[1].some((t) => t.status === 'failed')) - Number(a[1].some((t) => t.status === 'failed')) || a[0].localeCompare(b[0]))
-    .map(([flow, tests]) => {
-      const ok = tests.filter((t) => t.status === 'passed').length;
-      const bad = tests.length - ok;
-      const width = (tests.length / maxPerFlow) * 100;
-      const seg = (cls: string, n: number) => (n ? `<span class="seg ${cls}" style="width:${Math.round((n / tests.length) * 10000) / 100}%">${n}</span>` : '');
-      return `<div class="flow-row" data-flow="${esc(flow)}"><span class="flow-name">${esc(flow)}</span><span class="bar" style="width:${width}%">${seg('passed', ok)}${seg('failed', bad)}</span><span class="flow-count muted">${ok}/${tests.length}</span></div>`;
-    })
-    .join('');
-
-  const failures = reports
-    .filter((r) => r.status === 'failed')
+  const rows = [...reports]
+    .sort((a, b) => Number(b.status === 'failed') - Number(a.status === 'failed') || a.name.localeCompare(b.name))
     .map((r) => {
       const dir = resultsDirName(r.file);
-      const step = r.steps.find((st) => st.status === 'failed');
-      const detail = step ? `step ${step.index}: ${step.kind === 'expect' ? 'expect ' : ''}${esc(step.text)}${step.error ? ` <span class="error-inline">${esc(step.error.split('\n')[0]!)}</span>` : ''}` : '';
-      return `<li><span class="badge failed">failed</span> <a href="#play=${esc(dir)}">${esc(r.name)}</a> <span class="muted">${esc(r.flow)}</span><div class="fail-detail">${detail}</div></li>`;
+      const step = r.status === 'failed' ? r.steps.find((st) => st.status === 'failed') : undefined;
+      const detail = step
+        ? `<div class="fail-detail">step ${step.index}: ${step.kind === 'expect' ? 'expect ' : ''}${esc(step.text)}${step.error ? ` <span class="error-inline">${esc(step.error.split('\\n')[0]!)}</span>` : ''}</div>`
+        : '';
+      const meta = `${(r.durationMs / 1000).toFixed(1)}s${r.anomalyCount ? ` · <span class="warn">⚠ ${r.anomalyCount}</span>` : ''}`;
+      return `<li class="trow ${r.status}"><span class="mark">${r.status === 'passed' ? '✅' : '❌'}</span><span class="tname"><a href="#play=${esc(dir)}">${esc(r.name)}</a>${detail}</span><span class="tmeta muted">${meta}</span></li>`;
     })
     .join('');
 
@@ -344,8 +325,7 @@ export function summarySection(reports: Report[], opts: RenderOptions): string {
 
   return `<div class="summary">
 <div class="headline"><span class="big">${passed} of ${reports.length} passed</span><span class="stat ${failed ? 'bad' : ''}">❌ ${plural(failed, 'failed', 'failed')}</span><span class="stat ${anomalies ? 'warn' : ''}">⚠️ ${plural(anomalies, 'anomaly', 'anomalies')}</span>${history}</div>
-<div class="flows" role="img" aria-label="Passed and failed tests per flow">${rows}<div class="legend"><span><i class="sw passed"></i>✅ passed</span><span><i class="sw failed"></i>❌ failed</span></div></div>
-${failed ? `<ul class="failures">${failures}</ul>` : ''}
+<ul class="tests">${rows}</ul>
 </div>`;
 }
 

@@ -107,12 +107,11 @@ describe('summary at the top of the report', () => {
     expect(i).toBeLessThan(html.indexOf('<section class="test'));
     expect(html).toMatch(/<div class="summary">[\s\S]*2 of 3 passed[\s\S]*1 failed[\s\S]*5 anomalies/);
   });
-  it('shows one bar per flow with passed and failed counts as labels', () => {
-    expect(html).toMatch(/<div class="flow-row"[^>]*>[\s\S]*?Checkout[\s\S]*?class="seg failed"[^>]*style="width:100%"[^>]*>1</);
-    expect(html).toMatch(/Login[\s\S]*?class="seg passed"[^>]*style="width:100%"[^>]*>2</);
-  });
-  it('lists every failure with its step, error, and a play link', () => {
-    expect(html).toMatch(/class="failures">[\s\S]*?<a href="#play=pay">Checkout<\/a>[\s\S]*?step 3[\s\S]*?shows Order confirmed[\s\S]*?Assertion failed/);
+  it('lists every test by name with its result, failures first, each linking into the player', () => {
+    const rows = [...html.matchAll(/<li class="trow (passed|failed)">[\s\S]*?<a href="#play=([^"]+)">([^<]+)<\/a>/g)].map((m) => [m[1], m[2], m[3]]);
+    expect(rows).toEqual([['failed', 'pay', 'Checkout'], ['passed', 'sign-in', 'Sign in'], ['passed', 'sign-out', 'Sign out']]);
+    expect(html).toMatch(/<li class="trow failed">[\s\S]*?step 3: expect shows Order confirmed[\s\S]*?Assertion failed/);
+    expect(html).not.toMatch(/class="flow-row"/);
   });
   it('renders a run-history row when history is supplied', async () => {
     const { renderHtmlWith } = await import('../src/report.js');
@@ -129,7 +128,7 @@ describe('summary at the top of the report', () => {
     expect(out).toMatch(/<a class="hbar passed" href="\/r\/1"[^>]*title="run 1 · 3\/3 passed/);
     expect(renderHtml([report])).not.toMatch(/class="history"/);
   });
-  it('omits the failures list when everything passed', () => {
-    expect(renderHtml([passedLogin])).not.toMatch(/class="failures"/);
+  it('shows no error detail under a passing test', () => {
+    expect(renderHtml([passedLogin])).not.toMatch(/class="fail-detail"/);
   });
 });
