@@ -11,7 +11,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/index.js",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/index.js && mkdir -p dist/map && cp src/map/canvas.html dist/map/",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

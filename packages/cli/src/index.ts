@@ -3,6 +3,7 @@ import { Command } from 'commander';
 import { runCommand } from './commands/run.js';
 import { reportCommand } from './commands/report.js';
 import { publishCommand } from './commands/publish.js';
+import { setupCommand } from './commands/setup.js';
 import { initCommand } from './commands/init.js';
 import { sessionAbort, sessionAct, sessionExpect, sessionList, sessionObserve, sessionSave, sessionServe, sessionStart, sessionStatus, sessionUndo } from './commands/session.js';
 import { fileURLToPath } from 'node:url';
@@ -104,6 +105,23 @@ program
   .action(async (o) => {
     const out = await reportCommand({ cwd: process.cwd(), open: o.open, standalone: o.standalone, title: o.title });
     console.log(out.standalone ?? out.index);
+  });
+
+program
+  .command('setup')
+  .description('Map the app (screens and transitions), then open the local canvas to shape test cases and record them with your agent')
+  .option('-c, --config <path>', 'path to ete.yaml', 'ete.yaml')
+  .option('--url <url>', 'override the base URL from ete.yaml')
+  .option('-p, --port <n>', 'canvas port', (v) => Number(v), 4747)
+  .option('--agent <name>', 'claude or codex (default: first found on PATH)')
+  .option('--crawl', 'map the app again even if e2e/map.json exists')
+  .option('--max-screens <n>', 'crawl limit', (v) => Number(v), 40)
+  .option('--max-depth <n>', 'crawl depth limit', (v) => Number(v), 4)
+  .option('--no-open', 'do not open the browser')
+  .action(async (o) => {
+    await setupCommand({ cwd: process.cwd(), config: o.config, url: o.url, port: o.port, agent: o.agent, crawl: o.crawl, maxScreens: o.maxScreens, maxDepth: o.maxDepth, open: o.open });
+    console.log('Press Ctrl+C to stop.');
+    await new Promise(() => {});
   });
 
 program

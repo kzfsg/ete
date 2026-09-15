@@ -10,7 +10,7 @@ export type MapEdge = { id: string; from: string; to: string; action: ResolvedAc
 export type MapCase = { id: string; title: string; path: string[]; steps: string[]; status: 'proposed' | 'recorded' | 'passed' | 'failed'; test?: string };
 export type AppMap = { version: 1; baseUrl: string; screens: MapScreen[]; edges: MapEdge[]; cases: MapCase[] };
 
-export type Interactive = { kind: 'link' | 'button'; name: string; selector: string; href?: string };
+export type Interactive = { kind: 'link' | 'button'; name: string; shortName: string; selector: string; href?: string };
 
 const DESTRUCTIVE = /\b(delete|remove|sign ?out|log ?out|logout|pay|purchase|buy|checkout|unsubscribe|deactivate|cancel account|reset)\b/i;
 
@@ -41,7 +41,16 @@ export function interactiveElements(tree: string, pageUrl: string): Interactive[
     const key = `${kind}:${name}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ kind, name, selector: `role=${kind}[name="${name.replace(/"/g, '\\"')}"]`, ...(href ? { href } : {}) });
+    // A nested heading (card-style buttons) is the human name; otherwise the accessible name itself.
+    const indent = (lines[i]!.match(/^\s*/)?.[0].length ?? 0);
+    let shortName = name;
+    for (let j = i + 1; j < lines.length; j++) {
+      const ind = lines[j]!.match(/^\s*/)?.[0].length ?? 0;
+      if (ind <= indent) break;
+      const h = /^\s*-\s+heading\s+"((?:[^"\\]|\\.)*)"/.exec(lines[j]!);
+      if (h) { shortName = h[1]!; break; }
+    }
+    out.push({ kind, name, shortName, selector: `role=${kind}[name="${name.replace(/"/g, '\\"')}"]`, ...(href ? { href } : {}) });
   }
   return out;
 }
@@ -53,12 +62,23 @@ export function screenSignature(obs: Observation): string {
   const tree = obs.a11yTree ?? '';
   const headings = [...tree.matchAll(/^\s*-\s+heading\s+"((?:[^"\\]|\\.)*)"\s+\[level=([12])\]/gm)].map((m) => m[1]!).slice(0, 3);
   const dialog = /^\s*-\s+(dialog|alertdialog)\b/m.test(tree) ? '|dialog' : '';
+  if (headings.length === 0) {
+    // No headings: the first few named controls are the next most stable identity.
+    const controls = [...tree.matchAll(/^\s*-\s+(?:button|link|textbox|combobox|tab)\s+"((?:[^"\\]|\\.)*)"/gm)].map((m) => m[1]!).slice(0, 3);
+    return `${path}|~${controls.join(',')}${dialog}`;
+  }
   return `${path}|${headings.join('|')}${dialog}`;
 }
 
 function screenName(obs: Observation, fallback: string): string {
-  const h = /^\s*-\s+heading\s+"((?:[^"\\]|\\.)*)"\s+\[level=[12]\]/m.exec(obs.a11yTree ?? '');
-  return h?.[1] ?? fallback;
+  const tree = obs.a11yTree ?? '';
+  const h = /^\s*-\s+heading\s+"((?:[^"\\]|\\.)*)"\s+\[level=[123]\]/m.exec(tree);
+  return h ? h[1]! : fallback;
+}
+
+/** A readable name from the control that opened a heading-less screen. */
+function nameFromAction(name: string): string {
+  return name.length > 40 ? name.split(/\s+/).slice(0, 3).join(' ').replace(/[.,:;!?]+$/, '') : name;
 }
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'screen';
@@ -77,10 +97,10 @@ export function layoutScreens(map: AppMap, opts: { force?: boolean } = {}): void
 
 // ---- crawler ---------------------------------------------------------------
 
-export type CrawlLimits = { maxScreens: number; maxDepth: number; maxActionsPerScreen: number };
+export type CrawlLimits = { maxScreens: number; maxDepth: number; maxActionsPerScreen: number; settleMs: number };
 export type CrawlOptions = { driver: Driver; baseUrl: string; outDir: string; limits?: Partial<CrawlLimits>; log?: (line: string) => void };
 
-const DEFAULT_LIMITS: CrawlLimits = { maxScreens: 40, maxDepth: 4, maxActionsPerScreen: 12 };
+const DEFAULT_LIMITS: CrawlLimits = { maxScreens: 40, maxDepth: 4, maxActionsPerScreen: 12, settleMs: 600 };
 
 /**
  * Breadth-first exploration of the app through the Driver: every screen is reached by replaying
@@ -88,6 +108,7 @@ const DEFAULT_LIMITS: CrawlLimits = { maxScreens: 40, maxDepth: 4, maxActionsPer
  */
 export async function crawl(o: CrawlOptions): Promise<AppMap> {
   const limits = { ...DEFAULT_LIMITS, ...o.limits };
+  const settleMs = limits.settleMs;
   const log = o.log ?? (() => {});
   const { driver } = o;
   const shotsDir = join(o.outDir, '.map');
@@ -115,10 +136,11 @@ export async function crawl(o: CrawlOptions): Promise<AppMap> {
   async function replay(actions: ResolvedAction[]): Promise<void> {
     await driver.act({ kind: 'navigate', url: '/' });
     for (const a of actions) await driver.act(a);
+    await driver.act({ kind: 'wait', ms: settleMs }); // the screen we land on must have rendered before we read it
   }
 
-  async function addScreen(obs: Observation, sig: string, depth: number, actions: ResolvedAction[], parent?: string): Promise<MapScreen> {
-    const name = screenName(obs, new URL(obs.url ?? o.baseUrl).pathname);
+  async function addScreen(obs: Observation, sig: string, depth: number, actions: ResolvedAction[], parent?: string, via?: string): Promise<MapScreen> {
+    const name = screenName(obs, via ? nameFromAction(via) : new URL(obs.url ?? o.baseUrl).pathname);
     const id = idFor(name);
     const screenshot = `.map/${id}.png`;
     await driver.screenshot(join(o.outDir, screenshot));
@@ -151,6 +173,7 @@ export async function crawl(o: CrawlOptions): Promise<AppMap> {
         try {
           await replay(base);
           await driver.act(action);
+          await driver.act({ kind: 'wait', ms: settleMs });
         } catch (err) {
           log(`  ✗ ${el.selector}: ${(err as Error).message.split('\n')[0]}`);
           continue;
@@ -159,10 +182,10 @@ export async function crawl(o: CrawlOptions): Promise<AppMap> {
         const sig = screenSignature(after);
         if (sig === from.signature) continue; // no visible change
         let to = bySig.get(sig);
-        if (!to) to = await addScreen(after, sig, from.depth + 1, [...base, action], from.id);
+        if (!to) to = await addScreen(after, sig, from.depth + 1, [...base, action], from.id, el.shortName);
         // Going back up the tree (Home, Back, logo) is navigation noise, not a flow.
         if (isAncestor(to.id, from.id)) continue;
-        const label = `click "${el.name}"`;
+        const label = `click "${el.shortName}"`;
         if (!map.edges.some((e) => e.from === from.id && e.to === to!.id)) {
           map.edges.push({ id: `${from.id}->${to.id}`, from: from.id, to: to.id, action, label });
         }

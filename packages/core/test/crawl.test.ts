@@ -43,12 +43,18 @@ const app = new FakeApp({
 });
 
 describe('interactiveElements', () => {
+  it('uses a nested heading as the short name for a button with a long accessible name', () => {
+    const tree = '- button "Solo Five random historic moments, 30 seconds each. 5 rounds — 30s per round":\n  - heading "Solo" [level=3]\n- button "Begin"';
+    const els = interactiveElements(tree, 'http://app/');
+    expect(els[0]).toEqual({ kind: 'button', name: 'Solo Five random historic moments, 30 seconds each. 5 rounds — 30s per round', shortName: 'Solo', selector: 'role=button[name="Solo Five random historic moments, 30 seconds each. 5 rounds — 30s per round"]' });
+    expect(els[1]!.shortName).toBe('Begin');
+  });
   it('extracts links and buttons with selectors, skipping external, mailto, and destructive ones', () => {
     const els = interactiveElements(app.states.home!.tree, 'http://app/');
     expect(els).toEqual([
-      { kind: 'link', name: 'Blog', selector: 'role=link[name="Blog"]', href: '/blog' },
-      { kind: 'button', name: 'Begin', selector: 'role=button[name="Begin"]' },
-      { kind: 'link', name: 'Privacy', selector: 'role=link[name="Privacy"]', href: '/privacy' },
+      { kind: 'link', name: 'Blog', shortName: 'Blog', selector: 'role=link[name="Blog"]', href: '/blog' },
+      { kind: 'button', name: 'Begin', shortName: 'Begin', selector: 'role=button[name="Begin"]' },
+      { kind: 'link', name: 'Privacy', shortName: 'Privacy', selector: 'role=link[name="Privacy"]', href: '/privacy' },
     ]);
   });
 });
@@ -62,6 +68,12 @@ describe('screenSignature', () => {
     expect(c).not.toBe(b);
     expect(a).toBe('/blog|Notes');
   });
+  it('falls back to the first control names when a screen has no headings, so game screens differ', () => {
+    const solo = screenSignature({ screenshotPng: png, url: 'http://app/', a11yTree: '- button "Zoom in"\n- textbox "year"\n- button "Place your pin on the map" [disabled]' });
+    const lobby = screenSignature({ screenshotPng: png, url: 'http://app/', a11yTree: '- button "Create Room"\n- button "Join Room"' });
+    expect(solo).not.toBe(lobby);
+    expect(solo).toBe('/|~Zoom in,year,Place your pin on the map');
+  });
 });
 
 describe('crawl', () => {
@@ -70,6 +82,10 @@ describe('crawl', () => {
     const map = await crawl({ driver: app, baseUrl: 'http://app', outDir, limits: { maxScreens: 40, maxDepth: 4, maxActionsPerScreen: 12 } });
     const names = map.screens.map((s) => s.name).sort();
     expect(names).toEqual(['Choose Mode', 'First post', 'Notes', 'Privacy', 'Round 1', 'Welcome']);
+    // a heading-less screen is named after the control that led to it
+    const noHeading = new FakeApp({ ...app.states, solo: { url: '/', tree: '- button "Zoom in"\n- button "Submit"', go: {} } });
+    const m2 = await crawl({ driver: noHeading, baseUrl: 'http://app', outDir: await mkdtemp(join(tmpdir(), 'ete-map-')) });
+    expect(m2.screens.map((s) => s.name)).toContain('Solo');
     expect(map.screens.find((s) => s.name === 'Welcome')!.depth).toBe(0);
     expect(map.screens.find((s) => s.name === 'Round 1')!.depth).toBe(2);
     const labels = map.edges.map((e) => `${map.screens.find((s) => s.id === e.from)!.name} -[${e.label}]-> ${map.screens.find((s) => s.id === e.to)!.name}`).sort();
@@ -90,6 +106,14 @@ describe('crawl', () => {
     expect(solo.steps).toEqual(['go to /', 'click "Begin"', 'click "Solo"', 'expect: the page shows "Round 1"']);
     expect(solo.status).toBe('proposed');
     expect(solo.path).toEqual(["choose-mode", "round-1"]);
+  });
+
+  it('lets a screen settle after replaying a path before reading it', async () => {
+    const a = new FakeApp(app.states); const waits: number[] = [];
+    const origAct = a.act.bind(a); a.act = async (x) => { if (x.kind === 'wait') waits.push(x.ms); return origAct(x); };
+    await crawl({ driver: a, baseUrl: 'http://app', outDir: await mkdtemp(join(tmpdir(), 'ete-map-')), limits: { settleMs: 50 } });
+    expect(waits.length).toBeGreaterThan(5);
+    expect(waits.every((w) => w === 50)).toBe(true);
   });
 
   it('respects the screen limit', async () => {
