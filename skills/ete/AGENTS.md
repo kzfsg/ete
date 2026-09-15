@@ -7,6 +7,24 @@ ete records what worked as a replayable test with video, trace, screenshots, and
 replays those tests deterministically with no model. When a replay fails, you resume the session at
 the failing step and fix it. ete never calls a model and never needs credentials.
 
+## Starting from nothing: `ete setup`
+
+When a repo has no tests yet, start with the map instead of guessing flows:
+
+1. `npx ete init --url <app url> --start "<serve command>"` if there is no `ete.yaml`.
+2. `npx ete setup` crawls the app (no model involved): every reachable screen, the action that
+   leads to it, a screenshot of each, written to `e2e/map.json`, then opens the canvas at
+   http://localhost:4747 with one proposed case per leaf screen.
+3. On the canvas the user drags screens, renames them, edits case titles and steps, adds a case from
+   a selected screen, or types a request in "Ask agent". That request is handed to you (Claude Code or
+   Codex, running locally) with the map as context: edit `e2e/map.json` to add or change cases; keep
+   ids and positions; do not record anything at that point.
+4. "Run · record & replay" hands each proposed case to you with a session id: record it with
+   `ete session … --id <id>`, save, and the canvas replays everything and opens the report.
+   Case statuses on the canvas follow the replay.
+5. `npx ete setup --crawl` maps again after the app changed; edited names, positions, notes, and
+   every case are kept.
+
 ## When asked for flows (e.g. "build 3 user flows, login through checkout")
 
 1. **Setup.** If there is no `ete.yaml`: `npx ete init --url <app url> --start "<serve command>"`.

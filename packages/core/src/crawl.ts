@@ -5,7 +5,7 @@ import type { Observation, ResolvedAction } from './schema.js';
 
 // ---- map model -------------------------------------------------------------
 
-export type MapScreen = { id: string; name: string; url: string; signature: string; screenshot: string; depth: number; x: number; y: number; notes?: string };
+export type MapScreen = { id: string; name: string; nameEdited?: boolean; url: string; signature: string; screenshot: string; depth: number; x: number; y: number; notes?: string };
 export type MapEdge = { id: string; from: string; to: string; action: ResolvedAction; label: string };
 export type MapCase = { id: string; title: string; path: string[]; steps: string[]; status: 'proposed' | 'recorded' | 'passed' | 'failed'; test?: string };
 export type AppMap = { version: 1; baseUrl: string; screens: MapScreen[]; edges: MapEdge[]; cases: MapCase[] };

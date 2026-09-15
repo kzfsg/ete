@@ -87,7 +87,7 @@ button:disabled{opacity:.5;cursor:default}
       var c = cover[s.id] || 0;
       n.innerHTML = '<img src="/shots/' + esc(s.screenshot.replace(/^\.map\//, '')) + '" alt=""><span class="cover ' + (c ? 'some' : 'none') + '">' + (c ? c + (c === 1 ? ' case' : ' cases') : 'no case') + '</span><div class="body"><div class="name" contenteditable="true" spellcheck="false">' + esc(s.name) + '</div><div class="meta" title="' + esc(s.url) + '">' + esc(s.url.replace(/^https?:\/\/[^/]+/, '') || '/') + '</div></div>';
       nodesEl.appendChild(n);
-      n.querySelector('.name').addEventListener('blur', function (e) { var v = e.target.textContent.trim(); if (v && v !== s.name) { s.name = v; scheduleSave(); render(); } });
+      n.querySelector('.name').addEventListener('blur', function (e) { var v = e.target.textContent.trim(); if (v && v !== s.name) { s.name = v; s.nameEdited = true; scheduleSave(); render(); } });
       n.querySelector('.name').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
       n.addEventListener('pointerdown', function (e) { if (e.target.isContentEditable) return; e.stopPropagation(); selected = s.id; dragNode(e, s, n); });
     });

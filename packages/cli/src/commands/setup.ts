@@ -32,10 +32,12 @@ export function mergeMaps(prev: AppMap, fresh: AppMap): AppMap {
   const prevBySig = new Map(prev.screens.map((s) => [s.signature, s]));
   const screens = fresh.screens.map((s) => {
     const p = prevBySig.get(s.signature);
-    return p ? { ...s, x: p.x, y: p.y, name: p.name, ...(p.notes ? { notes: p.notes } : {}) } : s;
+    return p ? { ...s, x: p.x, y: p.y, ...(p.nameEdited ? { name: p.name, nameEdited: true } : {}), ...(p.notes ? { notes: p.notes } : {}) } : s;
   });
-  const titles = new Set(prev.cases.map((c) => c.title));
-  const cases = [...prev.cases, ...fresh.cases.filter((c) => !titles.has(c.title))];
+  const ids = new Set(screens.map((s) => s.id));
+  const kept = prev.cases.filter((c) => c.status !== 'proposed' || c.path.every((id) => ids.has(id)));
+  const titles = new Set(kept.map((c) => c.title));
+  const cases = [...kept, ...fresh.cases.filter((c) => !titles.has(c.title))];
   return { ...fresh, screens, cases };
 }
 
