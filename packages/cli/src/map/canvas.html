@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>ete · app map</title>
+<style>
+:root{font-family:ui-sans-serif,system-ui,sans-serif;color:#1a1a1a;--bg:#f6f6f4;--line:#d9d9d4;--ink:#1a1a1a;--muted:#6b6b66;--accent:#2b5bd7;--ok:#16a34a;--bad:#dc2626;--warn:#b45309}
+html,body{height:100%;margin:0;background:var(--bg);overflow:hidden}
+#app{display:grid;grid-template-columns:1fr 360px;height:100%}
+#stage{position:relative;overflow:hidden;cursor:grab;background:radial-gradient(circle,#dcdcd6 1px,transparent 1px) 0 0/24px 24px}
+#stage.panning{cursor:grabbing}
+#world{position:absolute;left:0;top:0;transform-origin:0 0}
+svg#edges{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
+.edge{fill:none;stroke:#9a9a94;stroke-width:1.5}.edge.lit{stroke:var(--accent);stroke-width:2.5}
+.edge-label{font-size:11px;fill:var(--muted);paint-order:stroke;stroke:var(--bg);stroke-width:4px}
+.edge-label.lit{fill:var(--accent)}
+.node{position:absolute;width:240px;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.06);cursor:move;user-select:none}
+.node.dim{opacity:.45}.node.lit{border-color:var(--accent);box-shadow:0 0 0 2px rgba(43,91,215,.25)}
+.node.selected{border-color:var(--ink)}
+.node img{display:block;width:100%;aspect-ratio:16/10;object-fit:cover;object-position:top;border-radius:8px 8px 0 0;background:#111;pointer-events:none}
+.node .body{padding:8px 10px}
+.node .name{font-weight:600;font-size:13px;line-height:1.3}.node .name[contenteditable]{outline:none}.node .name:focus{background:#fffbe6}
+.node .meta{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.node .cover{position:absolute;top:6px;right:6px;font-size:11px;border-radius:999px;padding:2px 7px;background:#fff;border:1px solid var(--line)}
+.node .cover.none{color:var(--muted)}.node .cover.some{border-color:var(--ok);color:var(--ok)}
+#side{border-left:1px solid var(--line);background:#fff;display:flex;flex-direction:column;min-height:0}
+#side header{padding:14px 16px;border-bottom:1px solid var(--line)}
+#side h1{font-size:15px;margin:0}#side .sub{font-size:12px;color:var(--muted);margin-top:2px}
+#cases{flex:1;overflow:auto;padding:8px 0}
+.case{padding:8px 16px;border-bottom:1px solid #eee;cursor:pointer;font-size:13px}
+.case:hover{background:#fafaf8}.case.active{background:#eef2ff}
+.case .t{display:flex;gap:8px;align-items:baseline}.case .t .title{flex:1}.case .t .title[contenteditable]{outline:none}
+.case .st{font-size:10px;text-transform:uppercase;letter-spacing:.04em;border-radius:999px;padding:1px 6px;background:#eee;color:#555}
+.st.passed{background:#dcfce7;color:#166534}.st.failed{background:#fee2e2;color:#991b1b}.st.recorded{background:#dbeafe;color:#1e40af}
+.case .steps{margin:6px 0 0;padding-left:16px;color:#444;font-size:12px;display:none}.case.active .steps{display:block}
+.case .steps li[contenteditable]{outline:none}.case .steps li:focus{background:#fffbe6}
+.case .x{float:right;color:var(--muted);font-size:12px;border:0;background:transparent;cursor:pointer}
+#prompt{border-top:1px solid var(--line);padding:12px 16px;display:grid;gap:8px}
+#prompt textarea{width:100%;box-sizing:border-box;font:inherit;font-size:13px;padding:8px;border:1px solid var(--line);border-radius:6px;resize:vertical;min-height:56px}
+#prompt .row{display:flex;gap:8px;align-items:center}
+button.primary{font:inherit;font-size:13px;padding:8px 14px;border-radius:6px;border:1px solid var(--ink);background:var(--ink);color:#fff;cursor:pointer}
+button.secondary{font:inherit;font-size:13px;padding:8px 14px;border-radius:6px;border:1px solid var(--line);background:#fff;cursor:pointer}
+button:disabled{opacity:.5;cursor:default}
+#log{font:12px ui-monospace,monospace;background:#111;color:#e5e5e5;max-height:180px;overflow:auto;padding:8px 10px;border-radius:6px;white-space:pre-wrap;display:none}
+#log.show{display:block}
+#toolbar{position:absolute;left:12px;top:12px;display:flex;gap:6px;z-index:2}
+#toolbar button{font:inherit;font-size:12px;padding:6px 10px;border:1px solid var(--line);background:#fff;border-radius:6px;cursor:pointer}
+#hint{position:absolute;left:12px;bottom:10px;font-size:11px;color:var(--muted);z-index:2}
+</style></head>
+<body>
+<div id="app">
+  <div id="stage">
+    <div id="toolbar"><button id="fit">Fit</button><button id="relayout">Re-layout</button><button id="addcase">+ Case from selection</button></div>
+    <div id="world"><svg id="edges"></svg><div id="nodes"></div></div>
+    <div id="hint">drag background to pan · wheel to zoom · drag a screen to move it · click a screen, then + Case · click names/steps to edit</div>
+  </div>
+  <aside id="side">
+    <header><h1>App map</h1><div class="sub" id="sub"></div></header>
+    <div id="cases"></div>
+    <div id="prompt">
+      <pre id="log"></pre>
+      <textarea id="ptext" placeholder="Ask the agent: e.g. add a case for signing in with a wrong password"></textarea>
+      <div class="row"><button class="secondary" id="send">Ask agent</button><span style="flex:1"></span><button class="primary" id="run">Run · record & replay</button></div>
+    </div>
+  </aside>
+</div>
+<div id="canvas" hidden></div>
+<script>
+(function () {
+  var map = null, scale = 1, tx = 0, ty = 0, selected = null, activeCase = null, saveTimer = null;
+  var stage = document.getElementById('stage'), world = document.getElementById('world'), nodesEl = document.getElementById('nodes'), svg = document.getElementById('edges');
+  var casesEl = document.getElementById('cases'), logEl = document.getElementById('log');
+  var NODE_W = 240, NODE_H = 210;
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function byId(id) { return map.screens.find(function (s) { return s.id === id; }); }
+  function applyView() { world.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')'; }
+  function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(save, 400); }
+  function save() { return fetch('/api/map', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(map) }); }
+  function coveredScreens() { var set = {}; map.cases.forEach(function (c) { (c.path || []).forEach(function (id) { set[id] = (set[id] || 0) + 1; }); }); return set; }
+  function litSet() { if (!activeCase) return null; var c = map.cases.find(function (x) { return x.id === activeCase; }); if (!c) return null; var ids = [map.screens[0].id].concat(c.path); return { nodes: ids, edges: ids.slice(1).map(function (id, i) { return ids[i] + '>' + id; }) }; }
+
+  function render() {
+    var cover = coveredScreens(), lit = litSet();
+    nodesEl.innerHTML = '';
+    map.screens.forEach(function (s) {
+      var n = document.createElement('div'); n.className = 'node'; n.dataset.id = s.id; n.style.left = s.x + 'px'; n.style.top = s.y + 'px';
+      if (lit) n.classList.toggle('lit', lit.nodes.indexOf(s.id) >= 0), n.classList.toggle('dim', lit.nodes.indexOf(s.id) < 0); else if (!cover[s.id] && s.depth > 0) n.classList.add('dim');
+      if (selected === s.id) n.classList.add('selected');
+      var c = cover[s.id] || 0;
+      n.innerHTML = '<img src="/shots/' + esc(s.screenshot.replace(/^\.map\//, '')) + '" alt=""><span class="cover ' + (c ? 'some' : 'none') + '">' + (c ? c + (c === 1 ? ' case' : ' cases') : 'no case') + '</span><div class="body"><div class="name" contenteditable="true" spellcheck="false">' + esc(s.name) + '</div><div class="meta" title="' + esc(s.url) + '">' + esc(s.url.replace(/^https?:\/\/[^/]+/, '') || '/') + '</div></div>';
+      nodesEl.appendChild(n);
+      n.querySelector('.name').addEventListener('blur', function (e) { var v = e.target.textContent.trim(); if (v && v !== s.name) { s.name = v; s.nameEdited = true; scheduleSave(); render(); } });
+      n.querySelector('.name').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
+      n.addEventListener('pointerdown', function (e) { if (e.target.isContentEditable) return; e.stopPropagation(); selected = s.id; dragNode(e, s, n); });
+    });
+    drawEdges(lit);
+    renderCases();
+    document.getElementById('sub').textContent = map.screens.length + ' screens · ' + map.edges.length + ' transitions · ' + map.cases.length + ' cases · ' + map.baseUrl;
+  }
+
+  function drawEdges(lit) {
+    var minX = 0, minY = 0, maxX = 0, maxY = 0;
+    map.screens.forEach(function (s) { maxX = Math.max(maxX, s.x + NODE_W + 400); maxY = Math.max(maxY, s.y + NODE_H + 400); });
+    svg.setAttribute('width', maxX); svg.setAttribute('height', maxY);
+    svg.innerHTML = '<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9a9a94"/></marker><marker id="arrlit" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#2b5bd7"/></marker></defs>';
+    map.edges.forEach(function (e) {
+      var a = byId(e.from), b = byId(e.to); if (!a || !b) return;
+      var x1 = a.x + NODE_W, y1 = a.y + NODE_H / 2, x2 = b.x, y2 = b.y + NODE_H / 2;
+      if (b.x < a.x + NODE_W) { x1 = a.x + NODE_W / 2; y1 = a.y + NODE_H; x2 = b.x + NODE_W / 2; y2 = b.y; }
+      var isLit = lit && lit.edges.indexOf(e.from + '>' + e.to) >= 0;
+      var mx = (x1 + x2) / 2, d = 'M' + x1 + ',' + y1 + ' C' + mx + ',' + y1 + ' ' + mx + ',' + y2 + ' ' + x2 + ',' + y2;
+      var p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', d); p.setAttribute('class', 'edge' + (isLit ? ' lit' : '')); p.setAttribute('marker-end', isLit ? 'url(#arrlit)' : 'url(#arr)'); svg.appendChild(p);
+      var t = document.createElementNS('http://www.w3.org/2000/svg', 'text'); t.setAttribute('x', mx); t.setAttribute('y', (y1 + y2) / 2 - 6); t.setAttribute('text-anchor', 'middle'); t.setAttribute('class', 'edge-label' + (isLit ? ' lit' : '')); t.textContent = e.label; svg.appendChild(t);
+    });
+  }
+
+  function renderCases() {
+    casesEl.innerHTML = '';
+    if (!map.cases.length) { casesEl.innerHTML = '<div class="case" style="color:#6b6b66;cursor:default">No cases yet. Select a screen and press "+ Case", or ask the agent below.</div>'; }
+    map.cases.forEach(function (c) {
+      var d = document.createElement('div'); d.className = 'case' + (activeCase === c.id ? ' active' : ''); d.dataset.id = c.id;
+      d.innerHTML = '<div class="t"><span class="st ' + esc(c.status) + '">' + esc(c.status) + '</span><span class="title" contenteditable="true" spellcheck="false">' + esc(c.title) + '</span><button class="x" title="Remove case">✕</button></div><ol class="steps">' + c.steps.map(function (s) { return '<li contenteditable="true" spellcheck="false">' + esc(s) + '</li>'; }).join('') + '<li class="add" style="color:#6b6b66;cursor:pointer">+ step</li></ol>';
+      casesEl.appendChild(d);
+      d.addEventListener('click', function (e) { if (e.target.isContentEditable || e.target.classList.contains('x') || e.target.classList.contains('add')) return; activeCase = activeCase === c.id ? null : c.id; render(); });
+      d.querySelector('.x').addEventListener('click', function () { map.cases = map.cases.filter(function (x) { return x !== c; }); if (activeCase === c.id) activeCase = null; scheduleSave(); render(); });
+      d.querySelector('.title').addEventListener('blur', function (e) { var v = e.target.textContent.trim(); if (v) { c.title = v; scheduleSave(); } });
+      d.querySelectorAll('.steps li:not(.add)').forEach(function (li, i) {
+        li.addEventListener('blur', function () { var v = li.textContent.trim(); if (v) c.steps[i] = v; else c.steps.splice(i, 1); scheduleSave(); render(); });
+        li.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); li.blur(); } });
+      });
+      d.querySelector('.add').addEventListener('click', function () { c.steps.push('expect: …'); scheduleSave(); render(); });
+    });
+  }
+
+  function dragNode(e, s, n) {
+    var sx = e.clientX, sy = e.clientY, ox = s.x, oy = s.y, moved = false;
+    function mv(ev) { var dx = (ev.clientX - sx) / scale, dy = (ev.clientY - sy) / scale; if (Math.abs(dx) + Math.abs(dy) > 2) moved = true; s.x = Math.round(ox + dx); s.y = Math.round(oy + dy); n.style.left = s.x + 'px'; n.style.top = s.y + 'px'; drawEdges(litSet()); }
+    function up() { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); if (moved) scheduleSave(); render(); }
+    window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+  }
+  stage.addEventListener('pointerdown', function (e) {
+    if (e.target.closest('.node') || e.target.closest('#toolbar')) return;
+    var sx = e.clientX, sy = e.clientY, ox = tx, oy = ty; stage.classList.add('panning');
+    function mv(ev) { tx = ox + ev.clientX - sx; ty = oy + ev.clientY - sy; applyView(); }
+    function up() { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); stage.classList.remove('panning'); }
+    window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+  });
+  stage.addEventListener('wheel', function (e) { e.preventDefault(); var r = stage.getBoundingClientRect(); var px = e.clientX - r.left, py = e.clientY - r.top; var f = e.deltaY < 0 ? 1.1 : 1 / 1.1; var ns = Math.min(2.5, Math.max(0.15, scale * f)); tx = px - (px - tx) * (ns / scale); ty = py - (py - ty) * (ns / scale); scale = ns; applyView(); }, { passive: false });
+
+  function fit() {
+    if (!map.screens.length) return;
+    var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    map.screens.forEach(function (s) { minX = Math.min(minX, s.x); minY = Math.min(minY, s.y); maxX = Math.max(maxX, s.x + NODE_W); maxY = Math.max(maxY, s.y + NODE_H); });
+    var r = stage.getBoundingClientRect(); scale = Math.min(1.2, Math.max(0.15, Math.min((r.width - 80) / (maxX - minX), (r.height - 80) / (maxY - minY))));
+    tx = 40 - minX * scale; ty = 40 - minY * scale; applyView();
+  }
+  document.getElementById('fit').addEventListener('click', fit);
+  document.getElementById('relayout').addEventListener('click', function () {
+    var cols = {}; map.screens.forEach(function (s) { (cols[s.depth] = cols[s.depth] || []).push(s); });
+    Object.keys(cols).forEach(function (d) { cols[d].forEach(function (s, i) { s.x = 40 + d * 320; s.y = 40 + i * 260; }); });
+    scheduleSave(); render(); fit();
+  });
+  document.getElementById('addcase').addEventListener('click', function () {
+    if (!selected) { alert('Select a screen first.'); return; }
+    // shortest path root -> selected by BFS over edges
+    var root = map.screens[0].id, prev = {}, q = [root], seen = {}; seen[root] = true;
+    while (q.length) { var id = q.shift(); if (id === selected) break; map.edges.forEach(function (e) { if (e.from === id && !seen[e.to]) { seen[e.to] = true; prev[e.to] = e; q.push(e.to); } }); }
+    var path = [], steps = [], cur = selected;
+    while (cur !== root && prev[cur]) { path.unshift(cur); steps.unshift(prev[cur].label); cur = prev[cur].from; }
+    var s = byId(selected);
+    var c = { id: 'case-' + s.id + '-' + Date.now().toString(36), title: 'a visitor can reach "' + s.name + '"', path: path, steps: ['go to /'].concat(steps, ['expect: the page shows "' + s.name + '"']), status: 'proposed' };
+    map.cases.push(c); activeCase = c.id; scheduleSave(); render();
+  });
+
+  function stream(url, body, onDone) {
+    logEl.classList.add('show'); logEl.textContent = '';
+    document.getElementById('send').disabled = true; document.getElementById('run').disabled = true;
+    fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined }).then(function (res) {
+      if (!res.ok) { return res.text().then(function (t) { logEl.textContent += '✗ ' + t + '\n'; }); }
+      var reader = res.body.getReader(), dec = new TextDecoder(), buf = '';
+      function pump() { return reader.read().then(function (r) { if (r.done) return; buf += dec.decode(r.value, { stream: true }); var parts = buf.split('\n\n'); buf = parts.pop(); parts.forEach(function (p) { var line = p.replace(/^data: /, ''); try { var ev = JSON.parse(line); if (ev.type === 'line') logEl.textContent += ev.line + '\n'; else if (ev.type === 'done') logEl.textContent += (ev.ok ? '✓ done' : '✗ ' + (ev.error || 'failed')) + '\n'; } catch (e) { logEl.textContent += line + '\n'; } logEl.scrollTop = logEl.scrollHeight; }); return pump(); }); }
+      return pump();
+    }).catch(function (e) { logEl.textContent += '✗ ' + e.message + '\n'; }).then(function () { document.getElementById('send').disabled = false; document.getElementById('run').disabled = false; if (onDone) onDone(); });
+  }
+  document.getElementById('send').addEventListener('click', function () { var t = document.getElementById('ptext').value.trim(); if (!t) return; stream('/api/prompt', { text: t }, function () { document.getElementById('ptext').value = ''; }); });
+  document.getElementById('run').addEventListener('click', function () { if (!confirm('Record every proposed case with the agent, then replay all tests?')) return; stream('/api/run'); });
+
+  function reload() { return fetch('/api/map').then(function (r) { return r.json(); }).then(function (m) { var first = !map; map = m; render(); if (first) fit(); }); }
+  var es = new EventSource('/api/events'); es.onmessage = function (e) { try { if (JSON.parse(e.data).type === 'map-changed') reload(); } catch (x) {} };
+  reload();
+})();
+</script>
+</body></html>

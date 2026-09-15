@@ -6,3 +6,4 @@ export * from './report.js';
 export * from './describe.js';
 export * from './flow.js';
 export * from './session.js';
+export * from './crawl.js';

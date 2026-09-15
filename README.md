@@ -18,6 +18,19 @@ steps:
   - expect: the page shows "Welcome, Alice"
 ```
 
+## Start with a map of the app
+
+```bash
+npx ete init --url http://localhost:3000 --start "npm run dev"
+npx ete setup          # crawls every screen, opens http://localhost:4747
+```
+
+`ete setup` explores the app breadth-first with a real browser (no model), records every screen with a screenshot and
+the action that reaches it, and opens a draggable canvas: screens as nodes, actions as edges, one proposed case per
+leaf. Edit names and steps inline, add cases from any screen, or type a request in "Ask agent": it runs your local
+Claude Code or Codex CLI with the map as context and the change appears on the canvas. "Run · record & replay" has the
+agent record every proposed case through sessions, replays everything, and opens the report; case statuses update.
+
 ## Quickstart
 
 ```bash
